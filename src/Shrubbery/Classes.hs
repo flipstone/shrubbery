@@ -50,14 +50,14 @@ import Shrubbery.TypeList (FirstIndexOf, KnownLength)
 
 {-|
   This type family is used by both 'Dissection' and 'Unification' to specify
-  the types of the values available in the branching type. IF you provided
+  the types of the values available in the branching type. If you provided
   instances of 'Dissection' or 'Unification', you'll need to provide an
   instance of this type family as well.
 -}
 type family BranchTypes a :: [Type]
 
 {-|
-  A 'Dissection' provides a way to "dissect" sum type via case analysis. The
+  A 'Dissection' provides a way to "dissect" a sum type via case analysis. The
   branches for handling the cases are given via a 'Branches' value.
 -}
 class Dissection a where
@@ -71,22 +71,22 @@ class Dissection a where
 
 {-|
   A 'Unification' provides a means to construct a sum type by embedding the
-  members of sum.
+  members of the sum.
 -}
 class Unification a where
   {-|
     Embeds a member of the sum in the sum by specifying its index. This
-    index-based interface required by implementors to ensure there is not
+    index-based interface is required by implementors to ensure there is not
     ambiguity when 'BranchTypes a' contains duplicates.
   -}
   unifyWithIndex :: BranchIndex t (BranchTypes a) -> t -> a
 
 {-|
-  Constructs a sum type by embedding a member type with in it.
+  Constructs a sum type by embedding a member type within it.
 
   This function always embeds the member based on the first time it is found
   in 'BranchTypes a'. If there are duplicate types in 'BranchTypes a', you
-  should use 'unifyWithIndex' disambiguate them.
+  should use 'unifyWithIndex' to disambiguate them.
 -}
 unify :: ( KnownNat branchIndex
          , branchIndex ~ FirstIndexOf t (BranchTypes a)
@@ -115,7 +115,7 @@ instance (Show a, ShowBranches rest) => ShowBranches (a : rest) where
 
 {-|
   'showsPrecViaDissect' can be used as the implementation of
-  'showsPrec' for types that implemention 'Dissection' when all the member
+  'showsPrec' for types that implement 'Dissection' when all the member
   types implement 'Show'
 -}
 showsPrecViaDissect :: ( Dissection a

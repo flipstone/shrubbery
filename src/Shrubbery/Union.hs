@@ -6,7 +6,7 @@
 {-|
   This module provides a implementation of a sum type whose members are
   known in the type sysem and provides implementations of 'Dissection'
-  and 'Unification'. It case be used as such:
+  and 'Unification'. It can be used as such:
 
   @
     type MyUnion = Union [Int, String]
@@ -62,7 +62,7 @@ instance (ShowBranches types, KnownLength types) => Show (Union types) where
   Selects a function from the branches based on the value contained within the
   union. This choice is based entirely on the index specified (or inferred) at
   the time the union was constructed, so there is no ambiguity if a type
-  appears multple times in the 'Union'
+  appears multiple times in the 'Union'
 
   This is also available as the 'dissect' function from the 'Dissection' class.
 -}

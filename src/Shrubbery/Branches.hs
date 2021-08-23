@@ -4,7 +4,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-|
   This modules provides functionality similar to Haskell's built-in case
-  statements, but which can be build at run time without losing exhaustivity
+  statements, but which can be built at run time without losing exhaustivity
   checking. The technique to satisfy both these desires is to use a type-level
   list of types to represent the type of value that is available in a given
   branch, which is analogous to the values you would extract while pattern
@@ -90,8 +90,8 @@ newtype BranchBuilder (paramTypes :: [Type]) result =
 
 {-|
   Selects a function out of some 'Branches' to use for a particular value. This
-  function picks the first function who's parameter type matches, which is
-  usually sufficient as @paramTypes@ will usually contain each time only once.
+  function picks the first function whose parameter type matches, which is
+  usually sufficient as @paramTypes@ will usually contain each type only once.
 
   If you need to select a particular index, use 'selectBranchAtProxy'.
 -}
@@ -156,7 +156,7 @@ branchBuild builder@(BranchBuilder populateBranches) =
 
 {-|
   Specifies how to handle a given position in a list of types. The function
-  parameter type is added to the front of the list of times for the branches
+  parameter type is added to the front of the list of types for the branches
   that are being constructed. This means that the branches must be specified
   (from "top" to "bottom") in the same order they are given in the list or else
   you get a compilation error.
@@ -171,7 +171,7 @@ branch branchFunction (BranchBuilder populateBranches) =
 
 {-|
   Indicates that there are no more branches to specify. This must appear as
-  the find entry in a sequence of 'branch' calls to handle the base case of
+  the final entry in a sequence of 'branch' calls to handle the base case of
   an empty type list.
 -}
 branchEnd :: BranchBuilder '[] result

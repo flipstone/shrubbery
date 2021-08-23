@@ -1,11 +1,11 @@
 {-|
-  @shrubbery@ provides programmic branching constructs based on type-level
+  @shrubbery@ provides programmatic branching constructs based on type-level
   lists that can be used to write the equivalent of @case@ statements when the
   number and types of cases are not known ahead of time by the programmer.
 
-  This is useful for writing domain specific languages that need to do
-  case-analysis on sum types supplier by the user, which otherwise requires
-  the user to provide a function to do the case-analysis on behalf of the
+  This is useful for writing domain-specific languages that need to do
+  case analysis on sum types supplied by the user, which otherwise requires
+  the user to provide a function to do the case analysis on behalf of the
   DSL.
 
   See 'Shrubbery.Union' for a sum type that provides the required braching

@@ -6,7 +6,7 @@
 
 {-|
   This module provides type families that are useful for working with type-level
-  lists. Usually you won't need to use these type directly as while using
+  lists. Usually you won't need to use these types directly as while using
   this package, but they may occasionally come in useful if you find yourself
   writing your own helper functions.
 -}
@@ -27,7 +27,7 @@ import GHC.TypeLits (KnownNat, Nat, TypeError, ErrorMessage(..), natVal, type (+
 
 {-|
   This type finds the first index of a type in the given list as a type-level
-  natural. It is implemented as a type-synonym around 'FirstIndexOfWithMsg' to
+  natural. It is implemented as a type synonym around 'FirstIndexOfWithMsg' to
   provide a nice error message when the given type is not found in the list.
 -}
 type FirstIndexOf t types =
@@ -49,7 +49,7 @@ type family FirstIndexOfWithMsg t (types :: [Type]) (errMsg :: ErrorMessage) whe
 
 {-|
   This type finds the type at the given index in a list of types. It is
-  implemented as a type-synonym around 'TypeAtIndexWithMsg' to provide a nice
+  implemented as a type synonym around 'TypeAtIndexWithMsg' to provide a nice
   error message when the given type is not found in the list.
 -}
 type TypeAtIndex n types =
@@ -94,8 +94,8 @@ type OutOfBoundsMsg (index :: Nat) (types :: [Type]) =
 {-|
   Similar to 'KnownNat', this class allows length of a type list that is
   known at compile time to be retrieved at runtime. This functionality is
-  experted as class rather than a family both to simply the type signatures
-  of functions that use this knowledge and situations where consumers would
+  exported as a class rather than a family both to simplify the type signatures
+  of functions that use this knowledge and for situations where consumers would
   need to turn on @UndecidableInstances@ to use it.
 -}
 class KnownLength (types :: [Type]) where
