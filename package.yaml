@@ -1,0 +1,51 @@
+name:                shrubbery
+version:             0.1.0.0
+github:              "flipstone/shrubbery"
+license:             BSD3
+author:              "Flipstone Technology Partners, Inc"
+maintainer:          "development@flipstone.com"
+copyright:           "2021 Flipstone Technology Partners, Inc"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/flipstone/shrubbery#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- primitive
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - Shrubbery
+    - Shrubbery.Classes
+    - Shrubbery.Branches
+    - Shrubbery.BranchIndex
+    - Shrubbery.Union
+    - Shrubbery.TypeList
+
+ghc-options:
+  - -Wall
+  - -Werror
+  - -O2
+
+tests:
+  shrubbery-test:
+    main:                Main.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - shrubbery
+    - hedgehog
