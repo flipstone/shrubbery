@@ -114,4 +114,3 @@ typesProxyToLengthProxy _ = Proxy
 type family Length (types :: [Type]) :: Nat where
   Length '[] = 0
   Length (_ : rest) = 1 + Length rest
-
