@@ -7,8 +7,8 @@ maintainer:          "development@flipstone.com"
 copyright:           "2021 Flipstone Technology Partners, Inc"
 
 extra-source-files:
-- README.md
-- ChangeLog.md
+  - README.md
+  - ChangeLog.md
 
 # Metadata used when publishing your package
 # synopsis:            Short description of your package
@@ -19,9 +19,15 @@ extra-source-files:
 # common to point users to the README.md file.
 description:         Please see the README on GitHub at <https://github.com/flipstone/shrubbery#readme>
 
+flags:
+  ci:
+    description: More strict ghc options used for development and ci, not intended for end-use.
+    manual: true
+    default: false
+
 dependencies:
-- base >= 4.7 && < 5
-- primitive
+  - base >= 4.7 && < 5
+  - primitive
 
 library:
   source-dirs: src
@@ -32,20 +38,44 @@ library:
     - Shrubbery.BranchIndex
     - Shrubbery.Union
     - Shrubbery.TypeList
-
-ghc-options:
-  - -Wall
-  - -Werror
-  - -O2
+  when:
+    - condition: flag(ci)
+      then:
+        ghc-options:
+          - -O2
+          - -Wall
+          - -Werror
+          - -Wcompat
+          - -Widentities
+          - -Wincomplete-uni-patterns
+          - -Wincomplete-patterns
+          - -Wincomplete-record-updates
+          - -Wmissing-local-signatures
+          - -Wmissing-export-lists
+          - -Wnoncanonical-monad-instances
+          - -Wpartial-fields
+          - -Wmissed-specialisations
+          - -Wno-implicit-prelude
+          - -Wno-safe
+          - -Wno-unsafe
+      else:
+        ghc-options:
+          - -O2
+          - -Wall
+          - -fwarn-incomplete-uni-patterns
+          - -fwarn-incomplete-record-updates
 
 tests:
   shrubbery-test:
-    main:                Main.hs
-    source-dirs:         test
+    main: Main.hs
+    source-dirs: test
     ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+      - -Wall
+      - -Werror
+      - -O2
     dependencies:
-    - shrubbery
-    - hedgehog
+      - shrubbery
+      - hedgehog

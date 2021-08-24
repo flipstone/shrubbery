@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 {-|
   This module provides a implementation of a sum type whose members are
   known in the type sysem and provides implementations of 'Dissection'
@@ -15,7 +14,7 @@
     anInt = unify (0 :: Int)
 
     aString :: MyUnion
-    aString = unify "Foo"
+    aString = unify \"Foo\"
 
     doSomething :: MyUnion -> String
     doSomething =
