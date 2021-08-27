@@ -42,8 +42,8 @@
     >>> selectBranch intStringOrBoolBranches (1 :: Int)
     doSomethingWithInt 1
 
-    >>> selectBranch intStringOrBoolBranches ("Foo")
-    doSomethingWithString "Foo"
+    >>> selectBranch intStringOrBoolBranches (\"Foo\")
+    doSomethingWithString \"Foo\"
 
     >>> selectBranch intStringOrBoolBranches True
     doSomethingWithBool True
@@ -186,4 +186,3 @@ unsafeToBranch = unsafeCoerce
 
 unsafeFromBranch :: (Any -> result) -> (a -> result)
 unsafeFromBranch = unsafeCoerce
-
