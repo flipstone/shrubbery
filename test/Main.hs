@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 module Main
   ( main
   ) where
@@ -10,10 +11,12 @@ import qualified Hedgehog as HH
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Main as HHM
 import qualified Hedgehog.Range as Range
+import           Text.Read (readMaybe)
 
 import Shrubbery.Branches
 import Shrubbery.Classes
 import Shrubbery.Union
+import Shrubbery.Parser
 
 main :: IO ()
 main =
@@ -24,6 +27,7 @@ main =
           [ ("Four way branching on type works", prop_fourWayBranchingOnType)
           , ("Four way branching on index works", prop_fourWayBranchingOnIndex)
           , ("Four way union dissection", prop_fourWayUnionDissection)
+          , ("Parser runs all options", prop_parserRunsAllOptions)
           ]
     ]
 
@@ -153,4 +157,37 @@ data DissectionCase
   | DissectBool
   | DissectDouble
   deriving (Show, Enum, Bounded)
+
+prop_parserRunsAllOptions :: HH.Property
+prop_parserRunsAllOptions =
+  let
+    parser :: Parser Maybe String [Int, Bool, String]
+    parser =
+        parseOption @Int readMaybe
+      $ parseOption @Bool readMaybe
+      $ parseOption @String Just
+      $ parseEnd
+
+    mkExpected :: String -> [Maybe (Union [Int, Bool, String])]
+    mkExpected input =
+      [ fmap (unify @Int)    (readMaybe input)
+      , fmap (unify @Bool)   (readMaybe input)
+      , fmap (unify @String) (Just input)
+      ]
+  in
+    HH.property $ do
+      value <-
+        HH.forAll $
+          Gen.choice
+            [ show <$> Gen.bool
+            , show <$> Gen.integral @_ @Int (Range.constant minBound maxBound)
+            , Gen.string (Range.constant 0 10) Gen.unicodeAll
+            ]
+
+      let
+        actual :: [Maybe (Union [Int, Bool, String])]
+        actual = parse parser value
+
+      fmap show actual === fmap show (mkExpected value)
+
 

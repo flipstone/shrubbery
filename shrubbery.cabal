@@ -34,6 +34,7 @@ library
       Shrubbery.Classes
       Shrubbery.Branches
       Shrubbery.BranchIndex
+      Shrubbery.Parser
       Shrubbery.Union
       Shrubbery.TypeList
   other-modules:

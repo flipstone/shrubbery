@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-|
@@ -88,10 +89,11 @@ class Unification a where
   in 'BranchTypes a'. If there are duplicate types in 'BranchTypes a', you
   should use 'unifyWithIndex' to disambiguate them.
 -}
-unify :: ( KnownNat branchIndex
-         , branchIndex ~ FirstIndexOf t (BranchTypes a)
-         , Unification a
-         )
+unify :: forall t a branchIndex.
+        ( KnownNat branchIndex
+        , branchIndex ~ FirstIndexOf t (BranchTypes a)
+        , Unification a
+        )
       => t
       -> a
 unify =
