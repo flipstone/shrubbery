@@ -19,6 +19,7 @@ module Shrubbery.TypeList
   , NotAMemberMsg
   , OutOfBoundsMsg
   , Length
+  , ZippedTypes
   ) where
 
 import Data.Kind (Type)
@@ -114,3 +115,10 @@ typesProxyToLengthProxy _ = Proxy
 type family Length (types :: [Type]) :: Nat where
   Length '[] = 0
   Length (_ : rest) = 1 + Length rest
+
+{-|
+
+-}
+type family ZippedTypes front focus back :: [Type] where
+  ZippedTypes '[] focus back = focus : back
+  ZippedTypes (a : rest) focus back = ZippedTypes rest a (focus : back)
