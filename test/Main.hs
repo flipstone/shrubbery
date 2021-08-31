@@ -135,19 +135,19 @@ prop_fourWayUnionDissection =
         case dissectionCase of
           DissectString -> do
             string <- HH.forAll $ Gen.string (Range.constant 0 10) Gen.unicodeAll
-            pure (unify string, indexResult 0 string)
+            pure (unify @String string, indexResult 0 string)
 
           DissectInt -> do
             int <- HH.forAll $ Gen.integral (Range.constant minBound maxBound)
-            pure (unify (int :: Int), indexResult 1 int)
+            pure (unify @Int int, indexResult 1 int)
 
           DissectBool  -> do
             bool <- HH.forAll $ Gen.bool
-            pure (unify bool, indexResult 2 bool)
+            pure (unify @Bool bool, indexResult 2 bool)
 
           DissectDouble -> do
             double <- HH.forAll $ Gen.double (Range.constant 0 100)
-            pure (unify double, indexResult 3 double)
+            pure (unify @Double double, indexResult 3 double)
 
       dissect branches (input :: Union [String, Int, Bool, Double]) === expected
 

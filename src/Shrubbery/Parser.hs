@@ -27,9 +27,9 @@
   @
   parser :: Parser Maybe String [Int, Bool, String]
   parser =
-      parseOption @Int readMaybe
-    $ parseOption @Bool readMaybe
-    $ parseOption @String Just
+      parseOption \@Int readMaybe
+    $ parseOption \@Bool readMaybe
+    $ parseOption \@String Just
     $ parseEnd
   @
 

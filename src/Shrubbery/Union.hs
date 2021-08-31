@@ -28,12 +28,18 @@
   Or you can use type applications:
 
   @
+    anInt :: MyUnion
+    anInt = unify \@Int 0
+
+    aString :: MyUnion
+    aString = unify \@String \"Foo\"
+
     doSomething :: MyUnion -> String
     doSomething =
       dissect
         $ branchBuild
-        $ branch @Int    show
-        $ branch @String id
+        $ branch \@Int    show
+        $ branch \@String id
         $ branchEnd
   @
 -}
