@@ -1,0 +1,233 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DataKinds #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE FlexibleContexts #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE GADTs #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE KindSignatures #-}</span><span>
+</span><span id="line-5"></span><span class="hs-pragma">{-# LANGUAGE RankNTypes #-}</span><span>
+</span><span id="line-6"></span><span class="hs-pragma">{-# LANGUAGE TypeOperators #-}</span><span>
+</span><span id="line-7"></span><span class="hs-comment">{-|
+  This module provides facilities for parsing input values into sum types
+  that implement the 'Unification' type classes. A 'Parser' is constructed
+  by giving a handler for each type in the union that attempts to parse the
+  input value into that type. These handlers must be given in the same order
+  as the types in the type-list that describes the sum type.
+
+  For instance:
+
+  @
+  parser :: Parser Maybe String [Int, Bool, String]
+  parser =
+      parseOption (readMaybe :: String -&gt; Maybe Int)
+    $ parseOption (readMaybe :: String -&gt; Maybe Bool)
+    $ parseOption (Just :: Strng -&gt; Maybe String)
+    $ parseEnd
+  @
+
+  Or, if you prefer to use @TypeApplications@,
+
+  @
+  parser :: Parser Maybe String [Int, Bool, String]
+  parser =
+      parseOption \@Int readMaybe
+    $ parseOption \@Bool readMaybe
+    $ parseOption \@String Just
+    $ parseEnd
+  @
+
+  When a 'Parser' is run via 'parse', it returns the parsing results for
+  all the options, allowing the caller to choose how to handle them. For
+  instance, using the parser above one might write the following code to
+  pick the first successful option from the list:
+
+  @
+  case catMaybes (parse parser someInputString) of
+    (first:_) -&gt;
+      Just first
+
+    [] -&gt;
+      Nothing
+  @
+-}</span><span>
+</span><span id="line-50"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Shrubbery.Parser</span><span>
+</span><span id="line-51"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier">Parser</span></a></span><span>
+</span><span id="line-52"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#parse"><span class="hs-identifier">parse</span></a></span><span>
+</span><span id="line-53"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#parseOption"><span class="hs-identifier">parseOption</span></a></span><span>
+</span><span id="line-54"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#parseEnd"><span class="hs-identifier">parseEnd</span></a></span><span>
+</span><span id="line-55"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Kind</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Type</span></span><span class="hs-special">)</span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html"><span class="hs-identifier">Shrubbery.BranchIndex</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier">TypeZipper</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#startZipper"><span class="hs-identifier">startZipper</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#moveZipperNext"><span class="hs-identifier">moveZipperNext</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#indexOfFocusedType"><span class="hs-identifier">indexOfFocusedType</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-60"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html"><span class="hs-identifier">Shrubbery.Classes</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#Unification"><span class="hs-identifier">Unification</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#unifyWithIndex"><span class="hs-identifier">unifyWithIndex</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier">BranchTypes</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html"><span class="hs-identifier">Shrubbery.TypeList</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.TypeList.html#ZippedTypes"><span class="hs-identifier">ZippedTypes</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="hs-comment">{-|
+  A 'Parser' allows an input value to be examined to see whether one or more
+  underlying types can be constructed from it, which are then embedded in a
+  union. The resulting type can be any type that provides an instance of
+  'Unification', such as 'Shrubby.Union.Union'.
+-}</span><span>
+</span><span id="line-69"></span><span class="hs-keyword">data</span><span> </span><span id="Parser"><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier hs-var">Parser</span></a></span></span><span> </span><span id="local-6989586621679036565"><span class="annot"><a href="#local-6989586621679036565"><span class="hs-identifier hs-type">f</span></a></span></span><span> </span><span id="local-6989586621679036564"><span class="annot"><a href="#local-6989586621679036564"><span class="hs-identifier hs-type">input</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679036563"><span class="annot"><a href="#local-6989586621679036563"><span class="hs-identifier hs-type">types</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Type</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-70"></span><span>  </span><span id="local-6989586621679036622"><span id="local-6989586621679036623"><span id="NilParse"><span class="annot"><a href="Shrubbery.Parser.html#NilParse"><span class="hs-identifier hs-var">NilParse</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036623"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036622"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="hs-special">'</span><span class="hs-special">[</span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-71"></span><span>  </span><span id="local-6989586621679036560"><span id="local-6989586621679036561"><span id="local-6989586621679036616"><span id="local-6989586621679036617"><span id="ConsParse"><span class="annot"><a href="Shrubbery.Parser.html#ConsParse"><span class="hs-identifier hs-var">ConsParse</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036617"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036616"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036561"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036616"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036617"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036560"><span class="hs-identifier hs-type">rest</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036616"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036617"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036561"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><a href="#local-6989586621679036560"><span class="hs-identifier hs-type">rest</span></a></span><span class="hs-special">)</span></span></span></span></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="hs-comment">{-|
+  Represents the base case of where no parsing options are present. You can
+  use this as the second argument to 'parseOption' when have no other options
+  to specify.
+-}</span><span>
+</span><span id="line-78"></span><span id="local-6989586621679036557"><span id="local-6989586621679036558"><span class="annot"><a href="Shrubbery.Parser.html#parseEnd"><span class="hs-identifier hs-type">parseEnd</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036558"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036557"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="hs-special">'</span><span class="hs-special">[</span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-79"></span><span id="parseEnd"><span class="annot"><span class="annottext">parseEnd :: Parser f input '[]
+</span><a href="Shrubbery.Parser.html#parseEnd"><span class="hs-identifier hs-var hs-var">parseEnd</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Parser f input '[]
+forall (f :: * -&gt; *) input. Parser f input '[]
+</span><a href="Shrubbery.Parser.html#NilParse"><span class="hs-identifier hs-var">NilParse</span></a></span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span class="hs-comment">{-|
+  Adds an option to the 'Parser'. Every option in the 'Parser' will be
+  given a chance to examine the input and possibly produce a value of the type
+  it produces. IF the option cannot produce a value its type from the input, it
+  should return whatever the appropriate value for functor @f@ is. For example,
+  if 'Maybe' is used as @f@, the function would produce @Nothing@ when given
+  input it does not want to handle.
+
+  Any values @a@ that are produced by the function will be unified with the
+  other values according the 'Unification' sum type that is expected when
+  'parse' is used.
+-}</span><span>
+</span><span id="line-93"></span><span class="annot"><a href="Shrubbery.Parser.html#parseOption"><span class="hs-identifier hs-type">parseOption</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679036556"><span class="annot"><a href="#local-6989586621679036556"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span id="local-6989586621679036555"><span class="annot"><a href="#local-6989586621679036555"><span class="hs-identifier hs-type">f</span></a></span></span><span> </span><span id="local-6989586621679036554"><span class="annot"><a href="#local-6989586621679036554"><span class="hs-identifier hs-type">input</span></a></span></span><span> </span><span id="local-6989586621679036553"><span class="annot"><a href="#local-6989586621679036553"><span class="hs-identifier hs-type">rest</span></a></span></span><span class="hs-operator">.</span><span>
+</span><span id="line-94"></span><span>            </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036554"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036555"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036556"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-95"></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036555"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036554"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036553"><span class="hs-identifier hs-type">rest</span></a></span><span>
+</span><span id="line-96"></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036555"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036554"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036556"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><a href="#local-6989586621679036553"><span class="hs-identifier hs-type">rest</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-97"></span><span id="parseOption"><span class="annot"><span class="annottext">parseOption :: (input -&gt; f a) -&gt; Parser f input rest -&gt; Parser f input (a : rest)
+</span><a href="Shrubbery.Parser.html#parseOption"><span class="hs-identifier hs-var hs-var">parseOption</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(input -&gt; f a) -&gt; Parser f input rest -&gt; Parser f input (a : rest)
+forall input (f :: * -&gt; *) a (rest :: [*]).
+(input -&gt; f a) -&gt; Parser f input rest -&gt; Parser f input (a : rest)
+</span><a href="Shrubbery.Parser.html#ConsParse"><span class="hs-identifier hs-var">ConsParse</span></a></span><span>
+</span><span id="line-98"></span><span>
+</span><span id="line-99"></span><span class="hs-comment">{-|
+  Executes a 'Parser' with a given input value, producing the list of options
+  returned be each function given to 'parseOption'. The returned list will
+  always have a number of items equal to the number of options added to the
+  'Parser'.
+
+  The caller must decide how to choose one or more results from the list
+  of options however is desired.
+-}</span><span>
+</span><span id="line-108"></span><span id="local-6989586621679036550"><span id="local-6989586621679036551"><span id="local-6989586621679036552"><span class="annot"><a href="Shrubbery.Parser.html#parse"><span class="hs-identifier hs-type">parse</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#Unification"><span class="hs-identifier hs-type">Unification</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036552"><span class="hs-identifier hs-type">sum</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Functor</span></span><span> </span><span class="annot"><a href="#local-6989586621679036551"><span class="hs-identifier hs-type">f</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-109"></span><span>      </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036551"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036550"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier hs-type">BranchTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036552"><span class="hs-identifier hs-type">sum</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-110"></span><span>      </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036550"><span class="hs-identifier hs-type">input</span></a></span><span>
+</span><span id="line-111"></span><span>      </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679036551"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036552"><span class="hs-identifier hs-type">sum</span></a></span><span class="hs-special">]</span></span></span></span><span>
+</span><span id="line-112"></span><span id="parse"><span class="annot"><span class="annottext">parse :: Parser f input (BranchTypes sum) -&gt; input -&gt; [f sum]
+</span><a href="Shrubbery.Parser.html#parse"><span class="hs-identifier hs-var hs-var">parse</span></a></span></span><span> </span><span id="local-6989586621679036549"><span class="annot"><span class="annottext">Parser f input (BranchTypes sum)
+</span><a href="#local-6989586621679036549"><span class="hs-identifier hs-var">parser</span></a></span></span><span> </span><span id="local-6989586621679036548"><span class="annot"><span class="annottext">input
+</span><a href="#local-6989586621679036548"><span class="hs-identifier hs-var">input</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-113"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Parser f input (BranchTypes sum)
+</span><a href="#local-6989586621679036549"><span class="hs-identifier hs-var">parser</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-114"></span><span>    </span><span class="annot"><span class="annottext">Parser f input (BranchTypes sum)
+</span><a href="Shrubbery.Parser.html#NilParse"><span class="hs-identifier hs-var">NilParse</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-115"></span><span>      </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-116"></span><span>
+</span><span id="line-117"></span><span>    </span><span class="annot"><a href="Shrubbery.Parser.html#ConsParse"><span class="hs-identifier hs-type">ConsParse</span></a></span><span> </span><span id="local-6989586621679036547"><span class="annot"><span class="annottext">input -&gt; f a
+</span><a href="#local-6989586621679036547"><span class="hs-identifier hs-var">tryDiff</span></a></span></span><span> </span><span id="local-6989586621679036546"><span class="annot"><span class="annottext">Parser f input rest
+</span><a href="#local-6989586621679036546"><span class="hs-identifier hs-var">diffRest</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-118"></span><span>      </span><span class="annot"><span class="annottext">(input -&gt; f a)
+-&gt; Parser f input rest -&gt; TypeZipper '[] a rest -&gt; input -&gt; [f sum]
+forall sum (front :: [*]) a (back :: [*]) (f :: * -&gt; *) input.
+(Unification sum, BranchTypes sum ~ ZippedTypes front a back,
+ Functor f) =&gt;
+(input -&gt; f a)
+-&gt; Parser f input back
+-&gt; TypeZipper front a back
+-&gt; input
+-&gt; [f sum]
+</span><a href="Shrubbery.Parser.html#parseZipper"><span class="hs-identifier hs-var">parseZipper</span></a></span><span> </span><span class="annot"><span class="annottext">input -&gt; f a
+</span><a href="#local-6989586621679036547"><span class="hs-identifier hs-var">tryDiff</span></a></span><span> </span><span class="annot"><span class="annottext">Parser f input rest
+</span><a href="#local-6989586621679036546"><span class="hs-identifier hs-var">diffRest</span></a></span><span> </span><span class="annot"><span class="annottext">TypeZipper '[] a rest
+forall first (back :: [*]). TypeZipper '[] first back
+</span><a href="Shrubbery.BranchIndex.html#startZipper"><span class="hs-identifier hs-var">startZipper</span></a></span><span> </span><span class="annot"><span class="annottext">input
+</span><a href="#local-6989586621679036548"><span class="hs-identifier hs-var">input</span></a></span><span>
+</span><span id="line-119"></span><span>
+</span><span id="line-120"></span><span class="hs-comment">{-|
+  This internal function uses a 'TypeZipper' to track the index the options
+  being processed so that 'unifyWithIndex' can be called appropriately. This
+  ensures that if two options produce the same type they are embedded in the
+  union with the appropriate index and can later be differentiated.
+-}</span><span>
+</span><span id="line-126"></span><span id="local-6989586621679036598"><span id="local-6989586621679036599"><span id="local-6989586621679036601"><span id="local-6989586621679036602"><span id="local-6989586621679036603"><span id="local-6989586621679036605"><span class="annot"><a href="Shrubbery.Parser.html#parseZipper"><span class="hs-identifier hs-type">parseZipper</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#Unification"><span class="hs-identifier hs-type">Unification</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036605"><span class="hs-identifier hs-type">sum</span></a></span><span>
+</span><span id="line-127"></span><span>              </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier hs-type">BranchTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036605"><span class="hs-identifier hs-type">sum</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">~</span></span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#ZippedTypes"><span class="hs-identifier hs-type">ZippedTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036603"><span class="hs-identifier hs-type">front</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036602"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036601"><span class="hs-identifier hs-type">back</span></a></span><span>
+</span><span id="line-128"></span><span>              </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Functor</span></span><span> </span><span class="annot"><a href="#local-6989586621679036599"><span class="hs-identifier hs-type">f</span></a></span><span>
+</span><span id="line-129"></span><span>              </span><span class="hs-special">)</span><span>
+</span><span id="line-130"></span><span>            </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036598"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036599"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036602"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-131"></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036599"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036598"><span class="hs-identifier hs-type">input</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036601"><span class="hs-identifier hs-type">back</span></a></span><span>
+</span><span id="line-132"></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-type">TypeZipper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036603"><span class="hs-identifier hs-type">front</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036602"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036601"><span class="hs-identifier hs-type">back</span></a></span><span>
+</span><span id="line-133"></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036598"><span class="hs-identifier hs-type">input</span></a></span><span>
+</span><span id="line-134"></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679036599"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036605"><span class="hs-identifier hs-type">sum</span></a></span><span class="hs-special">]</span></span></span></span></span></span></span><span>
+</span><span id="line-135"></span><span id="parseZipper"><span class="annot"><span class="annottext">parseZipper :: (input -&gt; f a)
+-&gt; Parser f input back
+-&gt; TypeZipper front a back
+-&gt; input
+-&gt; [f sum]
+</span><a href="Shrubbery.Parser.html#parseZipper"><span class="hs-identifier hs-var hs-var">parseZipper</span></a></span></span><span> </span><span id="local-6989586621679036544"><span class="annot"><span class="annottext">input -&gt; f a
+</span><a href="#local-6989586621679036544"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679036543"><span class="annot"><span class="annottext">Parser f input back
+</span><a href="#local-6989586621679036543"><span class="hs-identifier hs-var">parseRest</span></a></span></span><span> </span><span id="local-6989586621679036542"><span class="annot"><span class="annottext">TypeZipper front a back
+</span><a href="#local-6989586621679036542"><span class="hs-identifier hs-var">zipper</span></a></span></span><span> </span><span id="local-6989586621679036541"><span class="annot"><span class="annottext">input
+</span><a href="#local-6989586621679036541"><span class="hs-identifier hs-var">input</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-136"></span><span>  </span><span class="hs-keyword">let</span><span>
+</span><span id="line-137"></span><span>    </span><span id="local-6989586621679036540"><span class="annot"><span class="annottext">item :: f sum
+</span><a href="#local-6989586621679036540"><span class="hs-identifier hs-var hs-var">item</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-138"></span><span>      </span><span class="annot"><span class="annottext">BranchIndex a (BranchTypes sum) -&gt; a -&gt; sum
+forall a t.
+Unification a =&gt;
+BranchIndex t (BranchTypes a) -&gt; t -&gt; a
+</span><a href="Shrubbery.Classes.html#unifyWithIndex"><span class="hs-identifier hs-var">unifyWithIndex</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TypeZipper front a back -&gt; BranchIndex a (ZippedTypes front a back)
+forall (front :: [*]) focus (back :: [*]) t.
+TypeZipper front focus back
+-&gt; BranchIndex t (ZippedTypes front focus back)
+</span><a href="Shrubbery.BranchIndex.html#indexOfFocusedType"><span class="hs-identifier hs-var">indexOfFocusedType</span></a></span><span> </span><span class="annot"><span class="annottext">TypeZipper front a back
+</span><a href="#local-6989586621679036542"><span class="hs-identifier hs-var">zipper</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(a -&gt; sum) -&gt; f a -&gt; f sum
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">input -&gt; f a
+</span><a href="#local-6989586621679036544"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">input
+</span><a href="#local-6989586621679036541"><span class="hs-identifier hs-var">input</span></a></span><span>
+</span><span id="line-139"></span><span>
+</span><span id="line-140"></span><span>    </span><span id="local-6989586621679036538"><span class="annot"><span class="annottext">rest :: [f sum]
+</span><a href="#local-6989586621679036538"><span class="hs-identifier hs-var hs-var">rest</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-141"></span><span>      </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Parser f input back
+</span><a href="#local-6989586621679036543"><span class="hs-identifier hs-var">parseRest</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-142"></span><span>        </span><span class="annot"><span class="annottext">Parser f input back
+</span><a href="Shrubbery.Parser.html#NilParse"><span class="hs-identifier hs-var">NilParse</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-143"></span><span>          </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-144"></span><span>
+</span><span id="line-145"></span><span>        </span><span class="annot"><a href="Shrubbery.Parser.html#ConsParse"><span class="hs-identifier hs-type">ConsParse</span></a></span><span> </span><span id="local-6989586621679036537"><span class="annot"><span class="annottext">input -&gt; f a
+</span><a href="#local-6989586621679036537"><span class="hs-identifier hs-var">nextF</span></a></span></span><span> </span><span id="local-6989586621679036536"><span class="annot"><span class="annottext">Parser f input rest
+</span><a href="#local-6989586621679036536"><span class="hs-identifier hs-var">restOfRest</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-146"></span><span>          </span><span class="annot"><span class="annottext">(input -&gt; f a)
+-&gt; Parser f input rest
+-&gt; TypeZipper (a : front) a rest
+-&gt; input
+-&gt; [f sum]
+forall sum (front :: [*]) a (back :: [*]) (f :: * -&gt; *) input.
+(Unification sum, BranchTypes sum ~ ZippedTypes front a back,
+ Functor f) =&gt;
+(input -&gt; f a)
+-&gt; Parser f input back
+-&gt; TypeZipper front a back
+-&gt; input
+-&gt; [f sum]
+</span><a href="Shrubbery.Parser.html#parseZipper"><span class="hs-identifier hs-var">parseZipper</span></a></span><span> </span><span class="annot"><span class="annottext">input -&gt; f a
+</span><a href="#local-6989586621679036537"><span class="hs-identifier hs-var">nextF</span></a></span><span> </span><span class="annot"><span class="annottext">Parser f input rest
+</span><a href="#local-6989586621679036536"><span class="hs-identifier hs-var">restOfRest</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TypeZipper front a (a : rest) -&gt; TypeZipper (a : front) a rest
+forall (front :: [*]) focus next (back :: [*]) (rest :: [*]).
+TypeZipper front focus (next : back)
+-&gt; TypeZipper (focus : front) next rest
+</span><a href="Shrubbery.BranchIndex.html#moveZipperNext"><span class="hs-identifier hs-var">moveZipperNext</span></a></span><span> </span><span class="annot"><span class="annottext">TypeZipper front a back
+TypeZipper front a (a : rest)
+</span><a href="#local-6989586621679036542"><span class="hs-identifier hs-var">zipper</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">input
+</span><a href="#local-6989586621679036541"><span class="hs-identifier hs-var">input</span></a></span><span>
+</span><span id="line-147"></span><span>
+</span><span id="line-148"></span><span>  </span><span class="hs-keyword">in</span><span>
+</span><span id="line-149"></span><span>    </span><span class="annot"><span class="annottext">f sum
+</span><a href="#local-6989586621679036540"><span class="hs-identifier hs-var">item</span></a></span><span> </span><span class="annot"><span class="annottext">f sum -&gt; [f sum] -&gt; [f sum]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[f sum]
+</span><a href="#local-6989586621679036538"><span class="hs-identifier hs-var">rest</span></a></span><span>
+</span><span id="line-150"></span></pre></body></html>

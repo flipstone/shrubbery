@@ -1,0 +1,127 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DataKinds #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE FlexibleContexts #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE GADTs #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE TypeFamilies #-}</span><span>
+</span><span id="line-5"></span><span class="hs-comment">{-|
+  This module provides a implementation of a sum type whose members are
+  known in the type sysem and provides implementations of 'Dissection'
+  and 'Unification'. It can be used as such:
+
+  @
+    type MyUnion = Union [Int, String]
+
+    anInt :: MyUnion
+    anInt = unify (0 :: Int)
+
+    aString :: MyUnion
+    aString = unify \&quot;Foo\&quot;
+
+    doSomething :: MyUnion -&gt; String
+    doSomething =
+      dissect
+        $ branchBuild
+        $ branch (show :: Int -&gt; String)
+        $ branch id
+        $ branchEnd
+  @
+
+  Or you can use type applications:
+
+  @
+    anInt :: MyUnion
+    anInt = unify \@Int 0
+
+    aString :: MyUnion
+    aString = unify \@String \&quot;Foo\&quot;
+
+    doSomething :: MyUnion -&gt; String
+    doSomething =
+      dissect
+        $ branchBuild
+        $ branch \@Int    show
+        $ branch \@String id
+        $ branchEnd
+  @
+-}</span><span>
+</span><span id="line-46"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Shrubbery.Union</span><span>
+</span><span id="line-47"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier">Union</span></a></span><span>
+</span><span id="line-48"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Union.html#unifyUnion"><span class="hs-identifier">unifyUnion</span></a></span><span>
+</span><span id="line-49"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Union.html#dissectUnion"><span class="hs-identifier">dissectUnion</span></a></span><span>
+</span><span id="line-50"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html"><span class="hs-identifier">Shrubbery.Branches</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier">Branches</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#selectBranchAtIndex"><span class="hs-identifier">selectBranchAtIndex</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html"><span class="hs-identifier">Shrubbery.BranchIndex</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier">BranchIndex</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html"><span class="hs-identifier">Shrubbery.Classes</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier">BranchTypes</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#Dissection"><span class="hs-identifier">Dissection</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#Unification"><span class="hs-identifier">Unification</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#ShowBranches"><span class="hs-identifier">ShowBranches</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#showsPrecViaDissect"><span class="hs-identifier">showsPrecViaDissect</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html"><span class="hs-identifier">Shrubbery.TypeList</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.TypeList.html#KnownLength"><span class="hs-identifier">KnownLength</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="hs-comment">{-|
+  Defines a type whose value can be a value of any one of the specified types.
+-}</span><span>
+</span><span id="line-60"></span><span class="hs-keyword">data</span><span> </span><span id="Union"><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-var">Union</span></a></span></span><span> </span><span id="local-6989586621679036654"><span class="annot"><a href="#local-6989586621679036654"><span class="hs-identifier hs-type">types</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-61"></span><span>  </span><span id="local-6989586621679036653"><span id="local-6989586621679036670"><span id="Union"><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-var">Union</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036653"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036670"><span class="hs-identifier hs-type">types</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036653"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-type">Union</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036670"><span class="hs-identifier hs-type">types</span></a></span></span></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span id="local-6989586621679036651"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679036646"><span id="local-6989586621679036648"><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#ShowBranches"><span class="hs-identifier hs-type">ShowBranches</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036651"><span class="hs-identifier hs-type">types</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#KnownLength"><span class="hs-identifier hs-type">KnownLength</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036651"><span class="hs-identifier hs-type">types</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-type">Union</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036651"><span class="hs-identifier hs-type">types</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-64"></span><span>  </span><span id="local-6989586621679036644"><span class="annot"><span class="annottext">showsPrec :: Int -&gt; Union types -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">showsPrec</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Union types -&gt; ShowS
+forall a.
+(Dissection a, KnownLength (BranchTypes a),
+ ShowBranches (BranchTypes a)) =&gt;
+Int -&gt; a -&gt; ShowS
+</span><a href="Shrubbery.Classes.html#showsPrecViaDissect"><span class="hs-identifier hs-var">showsPrecViaDissect</span></a></span></span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span class="hs-comment">{-|
+  Selects a function from the branches based on the value contained within the
+  union. This choice is based entirely on the index specified (or inferred) at
+  the time the union was constructed, so there is no ambiguity if a type
+  appears multiple times in the 'Union'
+
+  This is also available as the 'dissect' function from the 'Dissection' class.
+-}</span><span>
+</span><span id="line-74"></span><span id="local-6989586621679036664"><span id="local-6989586621679036665"><span class="annot"><a href="Shrubbery.Union.html#dissectUnion"><span class="hs-identifier hs-type">dissectUnion</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-type">Branches</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036665"><span class="hs-identifier hs-type">types</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036664"><span class="hs-identifier hs-type">result</span></a></span><span>
+</span><span id="line-75"></span><span>             </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-type">Union</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036665"><span class="hs-identifier hs-type">types</span></a></span><span>
+</span><span id="line-76"></span><span>             </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036664"><span class="hs-identifier hs-type">result</span></a></span></span></span><span>
+</span><span id="line-77"></span><span id="dissectUnion"><span class="annot"><span class="annottext">dissectUnion :: Branches types result -&gt; Union types -&gt; result
+</span><a href="Shrubbery.Union.html#dissectUnion"><span class="hs-identifier hs-var hs-var">dissectUnion</span></a></span></span><span> </span><span id="local-6989586621679036642"><span class="annot"><span class="annottext">Branches types result
+</span><a href="#local-6989586621679036642"><span class="hs-identifier hs-var">branches</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-type">Union</span></a></span><span> </span><span id="local-6989586621679036641"><span class="annot"><span class="annottext">BranchIndex t types
+</span><a href="#local-6989586621679036641"><span class="hs-identifier hs-var">branchIndex</span></a></span></span><span> </span><span id="local-6989586621679036640"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679036640"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-78"></span><span>  </span><span class="annot"><span class="annottext">BranchIndex t types -&gt; Branches types result -&gt; t -&gt; result
+forall param (paramTypes :: [*]) result.
+BranchIndex param paramTypes
+-&gt; Branches paramTypes result -&gt; param -&gt; result
+</span><a href="Shrubbery.Branches.html#selectBranchAtIndex"><span class="hs-identifier hs-var">selectBranchAtIndex</span></a></span><span> </span><span class="annot"><span class="annottext">BranchIndex t types
+</span><a href="#local-6989586621679036641"><span class="hs-identifier hs-var">branchIndex</span></a></span><span> </span><span class="annot"><span class="annottext">Branches types result
+</span><a href="#local-6989586621679036642"><span class="hs-identifier hs-var">branches</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679036640"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-79"></span><span>
+</span><span id="line-80"></span><span class="hs-comment">{-|
+  Constructs a union based on the index of a member type in the list. This
+  function can be used rather than 'Shrubbery.Classes.unify' to disambiguate types that appear
+  multiple times in the list.
+
+  This is also available as 'unifyWithIndex' from the 'Unification' class.
+-}</span><span>
+</span><span id="line-87"></span><span id="local-6989586621679036638"><span id="local-6989586621679036639"><span class="annot"><a href="Shrubbery.Union.html#unifyUnion"><span class="hs-identifier hs-type">unifyUnion</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036639"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036638"><span class="hs-identifier hs-type">types</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036639"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-type">Union</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036638"><span class="hs-identifier hs-type">types</span></a></span></span></span><span>
+</span><span id="line-88"></span><span id="unifyUnion"><span class="annot"><span class="annottext">unifyUnion :: BranchIndex t types -&gt; t -&gt; Union types
+</span><a href="Shrubbery.Union.html#unifyUnion"><span class="hs-identifier hs-var hs-var">unifyUnion</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-89"></span><span>  </span><span class="annot"><span class="annottext">BranchIndex t types -&gt; t -&gt; Union types
+forall t (types :: [*]). BranchIndex t types -&gt; t -&gt; Union types
+</span><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-var">Union</span></a></span><span>
+</span><span id="line-90"></span><span>
+</span><span id="line-91"></span><span class="hs-keyword">type</span><span> </span><span class="hs-keyword">instance</span><span> </span><span id="BranchTypes"><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier hs-var">BranchTypes</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-type">Union</span></a></span><span> </span><span id="local-6989586621679036637"><span class="annot"><a href="#local-6989586621679036637"><span class="hs-identifier hs-type hs-type">types</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679036637"><span class="hs-identifier hs-type">types</span></a></span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span id="local-6989586621679036636"><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#Dissection"><span class="hs-identifier hs-type">Dissection</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-type">Union</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036636"><span class="hs-identifier hs-type">types</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-94"></span><span>  </span><span id="local-6989586621679036633"><span class="annot"><span class="annottext">dissect :: Branches (BranchTypes (Union types)) result
+-&gt; Union types -&gt; result
+</span><a href="Shrubbery.Classes.html#dissect"><span class="hs-identifier hs-var hs-var hs-var hs-var">dissect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Branches (BranchTypes (Union types)) result
+-&gt; Union types -&gt; result
+forall (types :: [*]) result.
+Branches types result -&gt; Union types -&gt; result
+</span><a href="Shrubbery.Union.html#dissectUnion"><span class="hs-identifier hs-var">dissectUnion</span></a></span></span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span id="local-6989586621679036631"><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#Unification"><span class="hs-identifier hs-type">Unification</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Union.html#Union"><span class="hs-identifier hs-type">Union</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036631"><span class="hs-identifier hs-type">types</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-97"></span><span>  </span><span id="local-6989586621679036628"><span class="annot"><span class="annottext">unifyWithIndex :: BranchIndex t (BranchTypes (Union types)) -&gt; t -&gt; Union types
+</span><a href="Shrubbery.Classes.html#unifyWithIndex"><span class="hs-identifier hs-var hs-var hs-var hs-var">unifyWithIndex</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">BranchIndex t (BranchTypes (Union types)) -&gt; t -&gt; Union types
+forall t (types :: [*]). BranchIndex t types -&gt; t -&gt; Union types
+</span><a href="Shrubbery.Union.html#unifyUnion"><span class="hs-identifier hs-var">unifyUnion</span></a></span></span><span>
+</span><span id="line-98"></span></pre></body></html>

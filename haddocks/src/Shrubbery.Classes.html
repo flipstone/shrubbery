@@ -1,0 +1,177 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DataKinds #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE FlexibleContexts #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE RankNTypes #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE TypeFamilies #-}</span><span>
+</span><span id="line-5"></span><span class="hs-pragma">{-# LANGUAGE TypeOperators #-}</span><span>
+</span><span id="line-6"></span><span class="hs-comment">{-|
+  This module provides typeclasses for constructing and deconstructing
+  types that have branches in them. This is to say, sum types or any type
+  that can present a sum-type-like interface.
+
+  See 'Shrubbery.Union' for examples using the provided 'Shrubbery.Union.Union'
+  type. Intances of these classes can also be provided for regular Haskell
+  sum types to allow them to be used with the programmable branching provided
+  by 'Shrubbery.Branches', like so:
+
+  @
+    data MySum = AnInt Int | AString String
+
+    type instance BranchTypes MySum = [Int, String]
+
+    instance Dissection MySum where
+      dissect branches sum =
+        case sum of
+          AnInt int -&gt; selectBranch branches int
+          AString string -&gt; selectBranch branches string
+
+    instance Unification MySum where
+      unifyWithIndex idx =
+        selectBranchAtIndex idx
+          $ branchBuild
+          $ branch AnInt
+          $ branch AString
+          $ branchEnd
+  @
+-}</span><span>
+</span><span id="line-36"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Shrubbery.Classes</span><span>
+</span><span id="line-37"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier">BranchTypes</span></a></span><span>
+</span><span id="line-38"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#Dissection"><span class="hs-identifier">Dissection</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#Unification"><span class="hs-identifier">Unification</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#unify"><span class="hs-identifier">unify</span></a></span><span>
+</span><span id="line-41"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#ShowBranches"><span class="hs-identifier">ShowBranches</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-42"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#showsPrecViaDissect"><span class="hs-identifier">showsPrecViaDissect</span></a></span><span>
+</span><span id="line-43"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Kind</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Type</span></span><span class="hs-special">)</span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">GHC.TypeLits</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">KnownNat</span></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html"><span class="hs-identifier">Shrubbery.BranchIndex</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier">BranchIndex</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#firstIndexOfType"><span class="hs-identifier">firstIndexOfType</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html"><span class="hs-identifier">Shrubbery.Branches</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier">Branches</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier">BranchBuilder</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#branchBuild"><span class="hs-identifier">branchBuild</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#branch"><span class="hs-identifier">branch</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#branchEnd"><span class="hs-identifier">branchEnd</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html"><span class="hs-identifier">Shrubbery.TypeList</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.TypeList.html#FirstIndexOf"><span class="hs-identifier">FirstIndexOf</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#KnownLength"><span class="hs-identifier">KnownLength</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="hs-comment">{-|
+  This type family is used by both 'Dissection' and 'Unification' to specify
+  the types of the values available in the branching type. If you provided
+  instances of 'Dissection' or 'Unification', you'll need to provide an
+  instance of this type family as well.
+-}</span><span>
+</span><span id="line-58"></span><span class="hs-keyword">type</span><span> </span><span class="hs-keyword">family</span><span> </span><span id="BranchTypes"><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier hs-var">BranchTypes</span></a></span></span><span> </span><span id="local-6989586621679036496"><span class="annot"><a href="#local-6989586621679036496"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Type</span></span><span class="hs-special">]</span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="hs-comment">{-|
+  A 'Dissection' provides a way to &quot;dissect&quot; a sum type via case analysis. The
+  branches for handling the cases are given via a 'Branches' value.
+-}</span><span>
+</span><span id="line-64"></span><span class="hs-keyword">class</span><span> </span><span id="Dissection"><span class="annot"><a href="Shrubbery.Classes.html#Dissection"><span class="hs-identifier hs-var">Dissection</span></a></span></span><span> </span><span id="local-6989586621679036508"><span class="annot"><a href="#local-6989586621679036508"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-65"></span><span>  </span><span class="hs-comment">{-|
+    Implementations of this must call the appropriate function in the given
+    branches depending on the construction of the value @a@. If 'BranchTypes a'
+    contains duplicate types, the implmentation should be careful to call the
+    correct one in each case.
+  -}</span><span>
+</span><span id="line-71"></span><span>  </span><span id="local-6989586621679036506"><span id="dissect"><span class="annot"><a href="Shrubbery.Classes.html#dissect"><span class="hs-identifier hs-type">dissect</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-type">Branches</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier hs-type">BranchTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036508"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679036506"><span class="hs-identifier hs-type">result</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036508"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036506"><span class="hs-identifier hs-type">result</span></a></span></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="hs-comment">{-|
+  A 'Unification' provides a means to construct a sum type by embedding the
+  members of the sum.
+-}</span><span>
+</span><span id="line-77"></span><span class="hs-keyword">class</span><span> </span><span id="Unification"><span class="annot"><a href="Shrubbery.Classes.html#Unification"><span class="hs-identifier hs-var">Unification</span></a></span></span><span> </span><span id="local-6989586621679036531"><span class="annot"><a href="#local-6989586621679036531"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-78"></span><span>  </span><span class="hs-comment">{-|
+    Embeds a member of the sum in the sum by specifying its index. This
+    index-based interface is required by implementors to ensure there is not
+    ambiguity when 'BranchTypes a' contains duplicates.
+  -}</span><span>
+</span><span id="line-83"></span><span>  </span><span id="local-6989586621679036529"><span id="unifyWithIndex"><span class="annot"><a href="Shrubbery.Classes.html#unifyWithIndex"><span class="hs-identifier hs-type">unifyWithIndex</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036529"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier hs-type">BranchTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036531"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036529"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036531"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="hs-comment">{-|
+  Constructs a sum type by embedding a member type within it.
+
+  This function always embeds the member based on the first time it is found
+  in 'BranchTypes a'. If there are duplicate types in 'BranchTypes a', you
+  should use 'unifyWithIndex' to disambiguate them.
+-}</span><span>
+</span><span id="line-92"></span><span class="annot"><a href="Shrubbery.Classes.html#unify"><span class="hs-identifier hs-type">unify</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679036493"><span class="annot"><a href="#local-6989586621679036493"><span class="hs-identifier hs-type">t</span></a></span></span><span> </span><span id="local-6989586621679036492"><span class="annot"><a href="#local-6989586621679036492"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span id="local-6989586621679036491"><span class="annot"><a href="#local-6989586621679036491"><span class="hs-identifier hs-type">branchIndex</span></a></span></span><span class="hs-operator">.</span><span>
+</span><span id="line-93"></span><span>        </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KnownNat</span></span><span> </span><span class="annot"><a href="#local-6989586621679036491"><span class="hs-identifier hs-type">branchIndex</span></a></span><span>
+</span><span id="line-94"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679036491"><span class="hs-identifier hs-type">branchIndex</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">~</span></span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#FirstIndexOf"><span class="hs-identifier hs-type">FirstIndexOf</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036493"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier hs-type">BranchTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036492"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-95"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#Unification"><span class="hs-identifier hs-type">Unification</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036492"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-96"></span><span>        </span><span class="hs-special">)</span><span>
+</span><span id="line-97"></span><span>      </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036493"><span class="hs-identifier hs-type">t</span></a></span><span>
+</span><span id="line-98"></span><span>      </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036492"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-99"></span><span id="unify"><span class="annot"><span class="annottext">unify :: t -&gt; a
+</span><a href="Shrubbery.Classes.html#unify"><span class="hs-identifier hs-var hs-var">unify</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-100"></span><span>  </span><span class="annot"><span class="annottext">BranchIndex t (BranchTypes a) -&gt; t -&gt; a
+forall a t.
+Unification a =&gt;
+BranchIndex t (BranchTypes a) -&gt; t -&gt; a
+</span><a href="Shrubbery.Classes.html#unifyWithIndex"><span class="hs-identifier hs-var">unifyWithIndex</span></a></span><span> </span><span class="annot"><span class="annottext">BranchIndex t (BranchTypes a)
+forall (branchIndex :: Nat) t (types :: [*]).
+(KnownNat branchIndex, branchIndex ~ FirstIndexOf t types) =&gt;
+BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#firstIndexOfType"><span class="hs-identifier hs-var">firstIndexOfType</span></a></span><span>
+</span><span id="line-101"></span><span>
+</span><span id="line-102"></span><span>
+</span><span id="line-103"></span><span class="hs-comment">{-|
+  'ShowBranches' is provided as a convenience for implementing 'Show' on
+  sum types via 'Dissection'
+-}</span><span>
+</span><span id="line-107"></span><span class="hs-keyword">class</span><span> </span><span id="ShowBranches"><span class="annot"><a href="Shrubbery.Classes.html#ShowBranches"><span class="hs-identifier hs-var">ShowBranches</span></a></span></span><span> </span><span id="local-6989586621679036521"><span class="annot"><a href="#local-6989586621679036521"><span class="hs-identifier hs-type">types</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-108"></span><span>  </span><span id="showsPrecBranches"><span class="annot"><a href="Shrubbery.Classes.html#showsPrecBranches"><span class="hs-identifier hs-type">showsPrecBranches</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-type">BranchBuilder</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036521"><span class="hs-identifier hs-type">types</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ShowS</span></span><span class="hs-special">)</span><span>
+</span><span id="line-109"></span><span>
+</span><span id="line-110"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#ShowBranches"><span class="hs-identifier hs-type">ShowBranches</span></a></span><span> </span><span class="hs-special">'</span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-111"></span><span>  </span><span id="local-6989586621679036487"><span class="annot"><span class="annottext">showsPrecBranches :: BranchBuilder '[] (Int -&gt; ShowS)
+</span><a href="#local-6989586621679036487"><span class="hs-identifier hs-var hs-var hs-var hs-var">showsPrecBranches</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-112"></span><span>    </span><span class="annot"><span class="annottext">BranchBuilder '[] (Int -&gt; ShowS)
+forall result. BranchBuilder '[] result
+</span><a href="Shrubbery.Branches.html#branchEnd"><span class="hs-identifier hs-var">branchEnd</span></a></span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span id="local-6989586621679036485"><span id="local-6989586621679036486"><span class="hs-keyword">instance</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679036486"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#ShowBranches"><span class="hs-identifier hs-type">ShowBranches</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036485"><span class="hs-identifier hs-type">rest</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#ShowBranches"><span class="hs-identifier hs-type">ShowBranches</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036486"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><a href="#local-6989586621679036485"><span class="hs-identifier hs-type">rest</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-115"></span><span>  </span><span id="local-6989586621679036483"><span class="annot"><span class="annottext">showsPrecBranches :: BranchBuilder (a : rest) (Int -&gt; ShowS)
+</span><a href="#local-6989586621679036483"><span class="hs-identifier hs-var hs-var hs-var hs-var">showsPrecBranches</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-116"></span><span>    </span><span class="annot"><span class="annottext">(a -&gt; Int -&gt; ShowS)
+-&gt; BranchBuilder rest (Int -&gt; ShowS)
+-&gt; BranchBuilder (a : rest) (Int -&gt; ShowS)
+forall param result (paramTypes :: [*]).
+(param -&gt; result)
+-&gt; BranchBuilder paramTypes result
+-&gt; BranchBuilder (param : paramTypes) result
+</span><a href="Shrubbery.Branches.html#branch"><span class="hs-identifier hs-var">branch</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Int -&gt; a -&gt; ShowS) -&gt; a -&gt; Int -&gt; ShowS
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; a -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; a -&gt; ShowS
+</span><span class="hs-identifier hs-var">showsPrec</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">BranchBuilder rest (Int -&gt; ShowS)
+forall (types :: [*]).
+ShowBranches types =&gt;
+BranchBuilder types (Int -&gt; ShowS)
+</span><a href="Shrubbery.Classes.html#showsPrecBranches"><span class="hs-identifier hs-var">showsPrecBranches</span></a></span></span></span><span>
+</span><span id="line-117"></span><span>
+</span><span id="line-118"></span><span class="hs-comment">{-|
+  'showsPrecViaDissect' can be used as the implementation of
+  'showsPrec' for types that implement 'Dissection' when all the member
+  types implement 'Show'
+-}</span><span>
+</span><span id="line-123"></span><span id="local-6989586621679036480"><span class="annot"><a href="Shrubbery.Classes.html#showsPrecViaDissect"><span class="hs-identifier hs-type">showsPrecViaDissect</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#Dissection"><span class="hs-identifier hs-type">Dissection</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036480"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-124"></span><span>                       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#KnownLength"><span class="hs-identifier hs-type">KnownLength</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier hs-type">BranchTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036480"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-125"></span><span>                       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Classes.html#ShowBranches"><span class="hs-identifier hs-type">ShowBranches</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Classes.html#BranchTypes"><span class="hs-identifier hs-type">BranchTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036480"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-126"></span><span>                       </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-127"></span><span>                       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036480"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-128"></span><span>                       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ShowS</span></span></span><span>
+</span><span id="line-129"></span><span id="showsPrecViaDissect"><span class="annot"><span class="annottext">showsPrecViaDissect :: Int -&gt; a -&gt; ShowS
+</span><a href="Shrubbery.Classes.html#showsPrecViaDissect"><span class="hs-identifier hs-var hs-var">showsPrecViaDissect</span></a></span></span><span> </span><span id="local-6989586621679036479"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036479"><span class="hs-identifier hs-var">prec</span></a></span></span><span> </span><span id="local-6989586621679036478"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679036478"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-130"></span><span>  </span><span class="annot"><span class="annottext">Branches (BranchTypes a) (Int -&gt; ShowS) -&gt; a -&gt; Int -&gt; ShowS
+forall a result.
+Dissection a =&gt;
+Branches (BranchTypes a) result -&gt; a -&gt; result
+</span><a href="Shrubbery.Classes.html#dissect"><span class="hs-identifier hs-var">dissect</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">BranchBuilder (BranchTypes a) (Int -&gt; ShowS)
+-&gt; Branches (BranchTypes a) (Int -&gt; ShowS)
+forall (paramTypes :: [*]) result.
+KnownLength paramTypes =&gt;
+BranchBuilder paramTypes result -&gt; Branches paramTypes result
+</span><a href="Shrubbery.Branches.html#branchBuild"><span class="hs-identifier hs-var">branchBuild</span></a></span><span> </span><span class="annot"><span class="annottext">BranchBuilder (BranchTypes a) (Int -&gt; ShowS)
+forall (types :: [*]).
+ShowBranches types =&gt;
+BranchBuilder types (Int -&gt; ShowS)
+</span><a href="Shrubbery.Classes.html#showsPrecBranches"><span class="hs-identifier hs-var">showsPrecBranches</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679036478"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036479"><span class="hs-identifier hs-var">prec</span></a></span><span>
+</span><span id="line-131"></span></pre></body></html>

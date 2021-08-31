@@ -1,0 +1,330 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DataKinds #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE TypeOperators #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE TypeFamilies #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE RankNTypes #-}</span><span>
+</span><span id="line-5"></span><span class="hs-comment">{-|
+  This modules provides functionality similar to Haskell's built-in case
+  statements, but which can be built at run time without losing exhaustivity
+  checking. The technique to satisfy both these desires is to use a type-level
+  list of types to represent the type of value that is available in a given
+  branch, which is analogous to the values you would extract while pattern
+  matching a Haskell type with multiple constructors in a case statement.
+
+  This is best understood through an example:
+
+  @
+    intStringOrBoolBranches :: Branches [Int, String, Bool] String
+    intStringOrBoolBranches =
+      branchBuild
+      $ branch doSomethingWithInt
+      $ branch doSomethingWithString
+      $ branch doSomethingWithBool
+      $ branchEnd
+  @
+
+  Or, if you prefer to use @TypeApplications@ to make this more explicit:
+
+  @
+    intStringOrBoolBranches :: Branches [Int, String, Bool] String
+    intStringOrBoolBranches =
+      branchBuild
+      $ branch @Int    doSomethingWithInt
+      $ branch @String doSomethingWithString
+      $ branch @Bool   doSomethingWithBool
+      $ branchEnd
+  @
+
+
+  You can then use the branch values above almost like functions to perform
+  case-like analysis based on the type of value, using 'selectBranch'
+
+  @
+    &gt;&gt;&gt; selectBranch intStringOrBoolBranches (1 :: Int)
+    doSomethingWithInt 1
+
+    &gt;&gt;&gt; selectBranch intStringOrBoolBranches (\&quot;Foo\&quot;)
+    doSomethingWithString \&quot;Foo\&quot;
+
+    &gt;&gt;&gt; selectBranch intStringOrBoolBranches True
+    doSomethingWithBool True
+  @
+-}</span><span>
+</span><span id="line-52"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Shrubbery.Branches</span><span>
+</span><span id="line-53"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#branchBuild"><span class="hs-identifier">branchBuild</span></a></span><span>
+</span><span id="line-54"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#branch"><span class="hs-identifier">branch</span></a></span><span>
+</span><span id="line-55"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#branchEnd"><span class="hs-identifier">branchEnd</span></a></span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier">Branches</span></a></span><span>
+</span><span id="line-58"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier">BranchBuilder</span></a></span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#selectBranch"><span class="hs-identifier">selectBranch</span></a></span><span>
+</span><span id="line-61"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#selectBranchAtIndex"><span class="hs-identifier">selectBranchAtIndex</span></a></span><span>
+</span><span id="line-62"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#selectBranchAtProxy"><span class="hs-identifier">selectBranchAtProxy</span></a></span><span>
+</span><span id="line-63"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.ST</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ST</span></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Kind</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Type</span></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Proxy</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Proxy</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Proxy</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-68"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Primitive.Array</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Arr</span></span><span>
+</span><span id="line-69"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Exts</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Any</span></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.TypeLits</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">KnownNat</span></span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Unsafe.Coerce</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">unsafeCoerce</span></span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Shrubbery.BranchIndex.html"><span class="hs-identifier">Shrubbery.BranchIndex</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier">BranchIndex</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#branchIndexToInt"><span class="hs-identifier">branchIndexToInt</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#firstIndexOfType"><span class="hs-identifier">firstIndexOfType</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#indexOfTypeAt"><span class="hs-identifier">indexOfTypeAt</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Shrubbery.TypeList.html"><span class="hs-identifier">Shrubbery.TypeList</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.TypeList.html#KnownLength"><span class="hs-identifier">KnownLength</span></a></span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.TypeList.html#lengthOfTypes"><span class="hs-identifier">lengthOfTypes</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#FirstIndexOf"><span class="hs-identifier">FirstIndexOf</span></a></span><span class="hs-special">,</span><span>  </span><span class="annot"><a href="Shrubbery.TypeList.html#TypeAtIndex"><span class="hs-identifier">TypeAtIndex</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span class="hs-comment">{-|
+  'Branches' contains an array of functions that have different parameter
+  types, but produce the same result. The @paramTypes@ list of types indicates
+  the types of the input parameters, in order.
+-}</span><span>
+</span><span id="line-81"></span><span class="hs-keyword">newtype</span><span> </span><span id="Branches"><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-var">Branches</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679036436"><span class="annot"><a href="#local-6989586621679036436"><span class="hs-identifier hs-type">paramTypes</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Type</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span id="local-6989586621679036437"><span class="annot"><a href="#local-6989586621679036437"><span class="hs-identifier hs-type">result</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-82"></span><span>  </span><span id="Branches"><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-var">Branches</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Arr.Array</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036437"><span class="hs-identifier hs-type">result</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>
+</span><span id="line-84"></span><span class="hs-comment">{-|
+  'BranchBuilder' is an efficient interface for building a 'Branches'.
+  Use 'branchBuild' to &quot;execute&quot; the 'BranchBuilder' to make 'Branches'.
+-}</span><span>
+</span><span id="line-88"></span><span class="hs-keyword">newtype</span><span> </span><span id="BranchBuilder"><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-var">BranchBuilder</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679036413"><span class="annot"><a href="#local-6989586621679036413"><span class="hs-identifier hs-type">paramTypes</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Type</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span id="local-6989586621679036414"><span class="annot"><a href="#local-6989586621679036414"><span class="hs-identifier hs-type">result</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-89"></span><span>  </span><span id="BranchBuilder"><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-var">BranchBuilder</span></a></span></span><span> </span><span class="hs-special">(</span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679036440"><span class="annot"><a href="#local-6989586621679036440"><span class="hs-identifier hs-type">s</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Arr.MutableArray</span></span><span> </span><span class="annot"><a href="#local-6989586621679036440"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036414"><span class="hs-identifier hs-type">result</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ST</span></span><span> </span><span class="annot"><a href="#local-6989586621679036440"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>
+</span><span id="line-91"></span><span class="hs-comment">{-|
+  Selects a function out of some 'Branches' to use for a particular value. This
+  function picks the first function whose parameter type matches, which is
+  usually sufficient as @paramTypes@ will usually contain each type only once.
+
+  If you need to select a particular index, use 'selectBranchAtProxy'.
+-}</span><span>
+</span><span id="line-98"></span><span id="local-6989586621679036377"><span id="local-6989586621679036378"><span id="local-6989586621679036379"><span id="local-6989586621679036380"><span class="annot"><a href="Shrubbery.Branches.html#selectBranch"><span class="hs-identifier hs-type">selectBranch</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KnownNat</span></span><span> </span><span class="annot"><a href="#local-6989586621679036380"><span class="hs-identifier hs-type">branchIndex</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679036380"><span class="hs-identifier hs-type">branchIndex</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">~</span></span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#FirstIndexOf"><span class="hs-identifier hs-type">FirstIndexOf</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036379"><span class="hs-identifier hs-type">param</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036378"><span class="hs-identifier hs-type">paramTypes</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span>             </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-type">Branches</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036378"><span class="hs-identifier hs-type">paramTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036377"><span class="hs-identifier hs-type">result</span></a></span><span>
+</span><span id="line-100"></span><span>             </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036379"><span class="hs-identifier hs-type">param</span></a></span><span>
+</span><span id="line-101"></span><span>             </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036377"><span class="hs-identifier hs-type">result</span></a></span></span></span></span></span><span>
+</span><span id="line-102"></span><span id="selectBranch"><span class="annot"><span class="annottext">selectBranch :: Branches paramTypes result -&gt; param -&gt; result
+</span><a href="Shrubbery.Branches.html#selectBranch"><span class="hs-identifier hs-var hs-var">selectBranch</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-103"></span><span>  </span><span class="annot"><span class="annottext">BranchIndex param paramTypes
+-&gt; Branches paramTypes result -&gt; param -&gt; result
+forall param (paramTypes :: [*]) result.
+BranchIndex param paramTypes
+-&gt; Branches paramTypes result -&gt; param -&gt; result
+</span><a href="Shrubbery.Branches.html#selectBranchAtIndex"><span class="hs-identifier hs-var">selectBranchAtIndex</span></a></span><span> </span><span class="annot"><span class="annottext">BranchIndex param paramTypes
+forall (branchIndex :: Nat) t (types :: [*]).
+(KnownNat branchIndex, branchIndex ~ FirstIndexOf t types) =&gt;
+BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#firstIndexOfType"><span class="hs-identifier hs-var">firstIndexOfType</span></a></span><span>
+</span><span id="line-104"></span><span>
+</span><span id="line-105"></span><span class="hs-comment">{-|
+  Selects the function out of 'Branches' at the given index so that it can be
+  used with the correct input parameter type. The index is specified via a proxy
+  value, like such:
+
+  @
+    selectBranchAtProxy (Proxy :: 1) branches
+  @
+
+  Or, with type applications:
+
+  @
+    selectBranchAtProxy @1 Proxy branches
+  @
+-}</span><span>
+</span><span id="line-120"></span><span id="local-6989586621679036372"><span id="local-6989586621679036373"><span id="local-6989586621679036374"><span id="local-6989586621679036375"><span id="local-6989586621679036376"><span class="annot"><a href="Shrubbery.Branches.html#selectBranchAtProxy"><span class="hs-identifier hs-type">selectBranchAtProxy</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KnownNat</span></span><span> </span><span class="annot"><a href="#local-6989586621679036376"><span class="hs-identifier hs-type">branchIndex</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679036375"><span class="hs-identifier hs-type">param</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">~</span></span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#TypeAtIndex"><span class="hs-identifier hs-type">TypeAtIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036376"><span class="hs-identifier hs-type">branchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036374"><span class="hs-identifier hs-type">paramTypes</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-121"></span><span>                    </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036373"><span class="hs-identifier hs-type">proxy</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036376"><span class="hs-identifier hs-type">branchIndex</span></a></span><span>
+</span><span id="line-122"></span><span>                    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-type">Branches</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036374"><span class="hs-identifier hs-type">paramTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036372"><span class="hs-identifier hs-type">result</span></a></span><span>
+</span><span id="line-123"></span><span>                    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036375"><span class="hs-identifier hs-type">param</span></a></span><span>
+</span><span id="line-124"></span><span>                    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036372"><span class="hs-identifier hs-type">result</span></a></span></span></span></span></span></span><span>
+</span><span id="line-125"></span><span id="selectBranchAtProxy"><span class="annot"><span class="annottext">selectBranchAtProxy :: proxy branchIndex -&gt; Branches paramTypes result -&gt; param -&gt; result
+</span><a href="Shrubbery.Branches.html#selectBranchAtProxy"><span class="hs-identifier hs-var hs-var">selectBranchAtProxy</span></a></span></span><span> </span><span id="local-6989586621679036371"><span class="annot"><span class="annottext">proxy branchIndex
+</span><a href="#local-6989586621679036371"><span class="hs-identifier hs-var">proxy</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-126"></span><span>  </span><span class="annot"><span class="annottext">BranchIndex param paramTypes
+-&gt; Branches paramTypes result -&gt; param -&gt; result
+forall param (paramTypes :: [*]) result.
+BranchIndex param paramTypes
+-&gt; Branches paramTypes result -&gt; param -&gt; result
+</span><a href="Shrubbery.Branches.html#selectBranchAtIndex"><span class="hs-identifier hs-var">selectBranchAtIndex</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">proxy branchIndex -&gt; BranchIndex param paramTypes
+forall (branchIndex :: Nat) t (types :: [*]) (proxy :: Nat -&gt; *).
+(KnownNat branchIndex, t ~ TypeAtIndex branchIndex types) =&gt;
+proxy branchIndex -&gt; BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#indexOfTypeAt"><span class="hs-identifier hs-var">indexOfTypeAt</span></a></span><span> </span><span class="annot"><span class="annottext">proxy branchIndex
+</span><a href="#local-6989586621679036371"><span class="hs-identifier hs-var">proxy</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-127"></span><span>
+</span><span id="line-128"></span><span class="hs-comment">{-|
+  Selects the function out of 'Branches' at the given index so that it can be
+  used with the correct input parameter type.
+-}</span><span>
+</span><span id="line-132"></span><span id="local-6989586621679036470"><span id="local-6989586621679036471"><span id="local-6989586621679036472"><span class="annot"><a href="Shrubbery.Branches.html#selectBranchAtIndex"><span class="hs-identifier hs-type">selectBranchAtIndex</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036472"><span class="hs-identifier hs-type">param</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036471"><span class="hs-identifier hs-type">paramTypes</span></a></span><span>
+</span><span id="line-133"></span><span>                    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-type">Branches</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036471"><span class="hs-identifier hs-type">paramTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036470"><span class="hs-identifier hs-type">result</span></a></span><span>
+</span><span id="line-134"></span><span>                    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036472"><span class="hs-identifier hs-type">param</span></a></span><span>
+</span><span id="line-135"></span><span>                    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036470"><span class="hs-identifier hs-type">result</span></a></span></span></span></span><span>
+</span><span id="line-136"></span><span id="selectBranchAtIndex"><span class="annot"><span class="annottext">selectBranchAtIndex :: BranchIndex param paramTypes
+-&gt; Branches paramTypes result -&gt; param -&gt; result
+</span><a href="Shrubbery.Branches.html#selectBranchAtIndex"><span class="hs-identifier hs-var hs-var">selectBranchAtIndex</span></a></span></span><span> </span><span id="local-6989586621679036370"><span class="annot"><span class="annottext">BranchIndex param paramTypes
+</span><a href="#local-6989586621679036370"><span class="hs-identifier hs-var">branchIndex</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-type">Branches</span></a></span><span> </span><span id="local-6989586621679036369"><span class="annot"><span class="annottext">Array (Any -&gt; result)
+</span><a href="#local-6989586621679036369"><span class="hs-identifier hs-var">array</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-137"></span><span>  </span><span class="annot"><span class="annottext">(Any -&gt; result) -&gt; param -&gt; result
+forall result a. (Any -&gt; result) -&gt; a -&gt; result
+</span><a href="Shrubbery.Branches.html#unsafeFromBranch"><span class="hs-identifier hs-var">unsafeFromBranch</span></a></span><span> </span><span class="annot"><span class="annottext">((Any -&gt; result) -&gt; param -&gt; result)
+-&gt; (Any -&gt; result) -&gt; param -&gt; result
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-138"></span><span>    </span><span class="annot"><span class="annottext">Array (Any -&gt; result) -&gt; Int -&gt; Any -&gt; result
+forall a. Array a -&gt; Int -&gt; a
+</span><span class="hs-identifier hs-var">Arr.indexArray</span></span><span>
+</span><span id="line-139"></span><span>      </span><span class="annot"><span class="annottext">Array (Any -&gt; result)
+</span><a href="#local-6989586621679036369"><span class="hs-identifier hs-var">array</span></a></span><span>
+</span><span id="line-140"></span><span>      </span><span class="hs-special">(</span><span class="annot"><span class="annottext">BranchIndex param paramTypes -&gt; Int
+forall t (types :: [*]). BranchIndex t types -&gt; Int
+</span><a href="Shrubbery.BranchIndex.html#branchIndexToInt"><span class="hs-identifier hs-var">branchIndexToInt</span></a></span><span> </span><span class="annot"><span class="annottext">BranchIndex param paramTypes
+</span><a href="#local-6989586621679036370"><span class="hs-identifier hs-var">branchIndex</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-141"></span><span>
+</span><span id="line-142"></span><span class="hs-comment">{-|
+  From a lexical code perspective you can think of this as &quot;beginning&quot; a branching
+  section (hence the name). It actually finalizes the building of branches to
+  optimized the lookup so that branch dispatching can be done in O(1) time.
+-}</span><span>
+</span><span id="line-147"></span><span id="local-6989586621679036365"><span id="local-6989586621679036366"><span class="annot"><a href="Shrubbery.Branches.html#branchBuild"><span class="hs-identifier hs-type">branchBuild</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#KnownLength"><span class="hs-identifier hs-type">KnownLength</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036366"><span class="hs-identifier hs-type">paramTypes</span></a></span><span>
+</span><span id="line-148"></span><span>            </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-type">BranchBuilder</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036366"><span class="hs-identifier hs-type">paramTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036365"><span class="hs-identifier hs-type">result</span></a></span><span>
+</span><span id="line-149"></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-type">Branches</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036366"><span class="hs-identifier hs-type">paramTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036365"><span class="hs-identifier hs-type">result</span></a></span></span></span><span>
+</span><span id="line-150"></span><span id="branchBuild"><span class="annot"><span class="annottext">branchBuild :: BranchBuilder paramTypes result -&gt; Branches paramTypes result
+</span><a href="Shrubbery.Branches.html#branchBuild"><span class="hs-identifier hs-var hs-var">branchBuild</span></a></span></span><span> </span><span id="local-6989586621679036364"><span class="annot"><span class="annottext">builder :: BranchBuilder paramTypes result
+</span><a href="#local-6989586621679036364"><span class="hs-identifier hs-var">builder</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-type">BranchBuilder</span></a></span><span> </span><span id="local-6989586621679036363"><span class="annot"><span class="annottext">forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ()
+</span><a href="#local-6989586621679036363"><span class="hs-identifier hs-var">populateBranches</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-151"></span><span>  </span><span class="annot"><span class="annottext">Array (Any -&gt; result) -&gt; Branches paramTypes result
+forall (paramTypes :: [*]) result.
+Array (Any -&gt; result) -&gt; Branches paramTypes result
+</span><a href="Shrubbery.Branches.html#Branches"><span class="hs-identifier hs-var">Branches</span></a></span><span> </span><span class="annot"><span class="annottext">(Array (Any -&gt; result) -&gt; Branches paramTypes result)
+-&gt; Array (Any -&gt; result) -&gt; Branches paramTypes result
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-152"></span><span>    </span><span class="annot"><span class="annottext">(forall s. ST s (MutableArray s (Any -&gt; result)))
+-&gt; Array (Any -&gt; result)
+forall a. (forall s. ST s (MutableArray s a)) -&gt; Array a
+</span><span class="hs-identifier hs-var">Arr.runArray</span></span><span> </span><span class="annot"><span class="annottext">((forall s. ST s (MutableArray s (Any -&gt; result)))
+ -&gt; Array (Any -&gt; result))
+-&gt; (forall s. ST s (MutableArray s (Any -&gt; result)))
+-&gt; Array (Any -&gt; result)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-153"></span><span>      </span><span id="local-6989586621679036361"><span class="annot"><span class="annottext">MutableArray s (Any -&gt; result)
+</span><a href="#local-6989586621679036361"><span class="hs-identifier hs-var">mutArray</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Int
+-&gt; (Any -&gt; result)
+-&gt; ST s (MutableArray (PrimState (ST s)) (Any -&gt; result))
+forall (m :: * -&gt; *) a.
+PrimMonad m =&gt;
+Int -&gt; a -&gt; m (MutableArray (PrimState m) a)
+</span><span class="hs-identifier hs-var">Arr.newArray</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Proxy paramTypes -&gt; Int
+forall (types :: [*]) (proxy :: [*] -&gt; *).
+KnownLength types =&gt;
+proxy types -&gt; Int
+</span><a href="Shrubbery.TypeList.html#lengthOfTypes"><span class="hs-identifier hs-var">lengthOfTypes</span></a></span><span> </span><span class="annot"><span class="annottext">(Proxy paramTypes -&gt; Int) -&gt; Proxy paramTypes -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">BranchBuilder paramTypes result -&gt; Proxy paramTypes
+forall (paramTypes :: [*]) result.
+BranchBuilder paramTypes result -&gt; Proxy paramTypes
+</span><a href="Shrubbery.Branches.html#paramTypesProxy"><span class="hs-identifier hs-var">paramTypesProxy</span></a></span><span> </span><span class="annot"><span class="annottext">BranchBuilder paramTypes result
+</span><a href="#local-6989586621679036364"><span class="hs-identifier hs-var">builder</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Any -&gt; result
+forall a. HasCallStack =&gt; a
+</span><span class="hs-identifier hs-var">undefined</span></span><span>
+</span><span id="line-154"></span><span>      </span><span class="annot"><span class="annottext">Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ()
+forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ()
+</span><a href="#local-6989586621679036363"><span class="hs-identifier hs-var">populateBranches</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">MutableArray s (Any -&gt; result)
+</span><a href="#local-6989586621679036361"><span class="hs-identifier hs-var">mutArray</span></a></span><span>
+</span><span id="line-155"></span><span>      </span><span class="annot"><span class="annottext">MutableArray s (Any -&gt; result)
+-&gt; ST s (MutableArray s (Any -&gt; result))
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">MutableArray s (Any -&gt; result)
+</span><a href="#local-6989586621679036361"><span class="hs-identifier hs-var">mutArray</span></a></span><span>
+</span><span id="line-156"></span><span>
+</span><span id="line-157"></span><span class="hs-comment">{-|
+  Specifies how to handle a given position in a list of types. The function
+  parameter type is added to the front of the list of types for the branches
+  that are being constructed. This means that the branches must be specified
+  (from &quot;top&quot; to &quot;bottom&quot;) in the same order they are given in the list or else
+  you get a compilation error.
+-}</span><span>
+</span><span id="line-164"></span><span id="local-6989586621679036355"><span id="local-6989586621679036356"><span id="local-6989586621679036357"><span class="annot"><a href="Shrubbery.Branches.html#branch"><span class="hs-identifier hs-type">branch</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036357"><span class="hs-identifier hs-type">param</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036356"><span class="hs-identifier hs-type">result</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-165"></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-type">BranchBuilder</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036355"><span class="hs-identifier hs-type">paramTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036356"><span class="hs-identifier hs-type">result</span></a></span><span>
+</span><span id="line-166"></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-type">BranchBuilder</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036357"><span class="hs-identifier hs-type">param</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><a href="#local-6989586621679036355"><span class="hs-identifier hs-type">paramTypes</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679036356"><span class="hs-identifier hs-type">result</span></a></span></span></span></span><span>
+</span><span id="line-167"></span><span id="branch"><span class="annot"><span class="annottext">branch :: (param -&gt; result)
+-&gt; BranchBuilder paramTypes result
+-&gt; BranchBuilder (param : paramTypes) result
+</span><a href="Shrubbery.Branches.html#branch"><span class="hs-identifier hs-var hs-var">branch</span></a></span></span><span> </span><span id="local-6989586621679036354"><span class="annot"><span class="annottext">param -&gt; result
+</span><a href="#local-6989586621679036354"><span class="hs-identifier hs-var">branchFunction</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-type">BranchBuilder</span></a></span><span> </span><span id="local-6989586621679036353"><span class="annot"><span class="annottext">forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ()
+</span><a href="#local-6989586621679036353"><span class="hs-identifier hs-var">populateBranches</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-168"></span><span>  </span><span class="annot"><span class="annottext">(forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ())
+-&gt; BranchBuilder (param : paramTypes) result
+forall (paramTypes :: [*]) result.
+(forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ())
+-&gt; BranchBuilder paramTypes result
+</span><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-var">BranchBuilder</span></a></span><span> </span><span class="annot"><span class="annottext">((forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ())
+ -&gt; BranchBuilder (param : paramTypes) result)
+-&gt; (forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ())
+-&gt; BranchBuilder (param : paramTypes) result
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679036352"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036352"><span class="hs-identifier hs-var">branchIndex</span></a></span></span><span> </span><span id="local-6989586621679036351"><span class="annot"><span class="annottext">MutableArray s (Any -&gt; result)
+</span><a href="#local-6989586621679036351"><span class="hs-identifier hs-var">array</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-169"></span><span>    </span><span class="annot"><span class="annottext">MutableArray (PrimState (ST s)) (Any -&gt; result)
+-&gt; Int -&gt; (Any -&gt; result) -&gt; ST s ()
+forall (m :: * -&gt; *) a.
+PrimMonad m =&gt;
+MutableArray (PrimState m) a -&gt; Int -&gt; a -&gt; m ()
+</span><span class="hs-identifier hs-var">Arr.writeArray</span></span><span> </span><span class="annot"><span class="annottext">MutableArray s (Any -&gt; result)
+MutableArray (PrimState (ST s)) (Any -&gt; result)
+</span><a href="#local-6989586621679036351"><span class="hs-identifier hs-var">array</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036352"><span class="hs-identifier hs-var">branchIndex</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(param -&gt; result) -&gt; Any -&gt; result
+forall a result. (a -&gt; result) -&gt; Any -&gt; result
+</span><a href="Shrubbery.Branches.html#unsafeToBranch"><span class="hs-identifier hs-var">unsafeToBranch</span></a></span><span> </span><span class="annot"><span class="annottext">param -&gt; result
+</span><a href="#local-6989586621679036354"><span class="hs-identifier hs-var">branchFunction</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-170"></span><span>    </span><span class="annot"><span class="annottext">Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ()
+forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ()
+</span><a href="#local-6989586621679036353"><span class="hs-identifier hs-var">populateBranches</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036352"><span class="hs-identifier hs-var">branchIndex</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">MutableArray s (Any -&gt; result)
+</span><a href="#local-6989586621679036351"><span class="hs-identifier hs-var">array</span></a></span><span>
+</span><span id="line-171"></span><span>
+</span><span id="line-172"></span><span class="hs-comment">{-|
+  Indicates that there are no more branches to specify. This must appear as
+  the final entry in a sequence of 'branch' calls to handle the base case of
+  an empty type list.
+-}</span><span>
+</span><span id="line-177"></span><span id="local-6989586621679036347"><span class="annot"><a href="Shrubbery.Branches.html#branchEnd"><span class="hs-identifier hs-type">branchEnd</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-type">BranchBuilder</span></a></span><span> </span><span class="hs-special">'</span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679036347"><span class="hs-identifier hs-type">result</span></a></span></span><span>
+</span><span id="line-178"></span><span id="branchEnd"><span class="annot"><span class="annottext">branchEnd :: BranchBuilder '[] result
+</span><a href="Shrubbery.Branches.html#branchEnd"><span class="hs-identifier hs-var hs-var">branchEnd</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ())
+-&gt; BranchBuilder '[] result
+forall (paramTypes :: [*]) result.
+(forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ())
+-&gt; BranchBuilder paramTypes result
+</span><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-var">BranchBuilder</span></a></span><span> </span><span class="annot"><span class="annottext">((forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ())
+ -&gt; BranchBuilder '[] result)
+-&gt; (forall s. Int -&gt; MutableArray s (Any -&gt; result) -&gt; ST s ())
+-&gt; BranchBuilder '[] result
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">MutableArray s (Any -&gt; result)
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">() -&gt; ST s ()
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-179"></span><span>
+</span><span id="line-180"></span><span id="local-6989586621679036423"><span id="local-6989586621679036424"><span class="annot"><a href="Shrubbery.Branches.html#paramTypesProxy"><span class="hs-identifier hs-type">paramTypesProxy</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.Branches.html#BranchBuilder"><span class="hs-identifier hs-type">BranchBuilder</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036424"><span class="hs-identifier hs-type">paramTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036423"><span class="hs-identifier hs-type">result</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Proxy</span></span><span> </span><span class="annot"><a href="#local-6989586621679036424"><span class="hs-identifier hs-type">paramTypes</span></a></span></span></span><span>
+</span><span id="line-181"></span><span id="paramTypesProxy"><span class="annot"><span class="annottext">paramTypesProxy :: BranchBuilder paramTypes result -&gt; Proxy paramTypes
+</span><a href="Shrubbery.Branches.html#paramTypesProxy"><span class="hs-identifier hs-var hs-var">paramTypesProxy</span></a></span></span><span> </span><span class="annot"><span class="annottext">BranchBuilder paramTypes result
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-182"></span><span>  </span><span class="annot"><span class="annottext">Proxy paramTypes
+forall k (t :: k). Proxy t
+</span><span class="hs-identifier hs-var">Proxy</span></span><span>
+</span><span id="line-183"></span><span>
+</span><span id="line-184"></span><span id="local-6989586621679036408"><span id="local-6989586621679036409"><span class="annot"><a href="Shrubbery.Branches.html#unsafeToBranch"><span class="hs-identifier hs-type">unsafeToBranch</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036409"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036408"><span class="hs-identifier hs-type">result</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036408"><span class="hs-identifier hs-type">result</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-185"></span><span id="unsafeToBranch"><span class="annot"><span class="annottext">unsafeToBranch :: (a -&gt; result) -&gt; Any -&gt; result
+</span><a href="Shrubbery.Branches.html#unsafeToBranch"><span class="hs-identifier hs-var hs-var">unsafeToBranch</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; result) -&gt; Any -&gt; result
+forall a b. a -&gt; b
+</span><span class="hs-identifier hs-var">unsafeCoerce</span></span><span>
+</span><span id="line-186"></span><span>
+</span><span id="line-187"></span><span id="local-6989586621679036450"><span id="local-6989586621679036451"><span class="annot"><a href="Shrubbery.Branches.html#unsafeFromBranch"><span class="hs-identifier hs-type">unsafeFromBranch</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036451"><span class="hs-identifier hs-type">result</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036450"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036451"><span class="hs-identifier hs-type">result</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-188"></span><span id="unsafeFromBranch"><span class="annot"><span class="annottext">unsafeFromBranch :: (Any -&gt; result) -&gt; a -&gt; result
+</span><a href="Shrubbery.Branches.html#unsafeFromBranch"><span class="hs-identifier hs-var hs-var">unsafeFromBranch</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Any -&gt; result) -&gt; a -&gt; result
+forall a b. a -&gt; b
+</span><span class="hs-identifier hs-var">unsafeCoerce</span></span><span>
+</span><span id="line-189"></span></pre></body></html>

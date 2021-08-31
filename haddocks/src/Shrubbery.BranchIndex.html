@@ -1,0 +1,177 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DataKinds #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE GADTs #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE TypeFamilies #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE TypeOperators #-}</span><span>
+</span><span id="line-5"></span><span class="hs-comment">{-|
+  This module provides types and functions for finding and using the index
+  of a type within a type-level list.
+-}</span><span>
+</span><span id="line-9"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Shrubbery.BranchIndex</span><span>
+</span><span id="line-10"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier">BranchIndex</span></a></span><span>
+</span><span id="line-11"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#firstIndexOfType"><span class="hs-identifier">firstIndexOfType</span></a></span><span>
+</span><span id="line-12"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#indexOfTypeAt"><span class="hs-identifier">indexOfTypeAt</span></a></span><span>
+</span><span id="line-13"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#branchIndexToInt"><span class="hs-identifier">branchIndexToInt</span></a></span><span>
+</span><span id="line-14"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier">TypeZipper</span></a></span><span>
+</span><span id="line-15"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#startZipper"><span class="hs-identifier">startZipper</span></a></span><span>
+</span><span id="line-16"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#moveZipperNext"><span class="hs-identifier">moveZipperNext</span></a></span><span>
+</span><span id="line-17"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#indexOfFocusedType"><span class="hs-identifier">indexOfFocusedType</span></a></span><span>
+</span><span id="line-18"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Kind</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Type</span></span><span class="hs-special">)</span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Proxy</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Proxy</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Proxy</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">GHC.TypeLits</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">KnownNat</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">natVal</span></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html"><span class="hs-identifier">Shrubbery.TypeList</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.TypeList.html#FirstIndexOf"><span class="hs-identifier">FirstIndexOf</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#TypeAtIndex"><span class="hs-identifier">TypeAtIndex</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#ZippedTypes"><span class="hs-identifier">ZippedTypes</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-comment">{-|
+  A 'BranchIndex' is an zero-based index into a list of types for which
+  the type at the index is known. This type is used with 'Shrubbery.Branches'
+  to perform efficient branching at runtime.
+-}</span><span>
+</span><span id="line-31"></span><span class="hs-keyword">newtype</span><span> </span><span id="BranchIndex"><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-var">BranchIndex</span></a></span></span><span> </span><span id="local-6989586621679036332"><span class="annot"><a href="#local-6989586621679036332"><span class="hs-identifier hs-type">t</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679036331"><span class="annot"><a href="#local-6989586621679036331"><span class="hs-identifier hs-type">types</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Type</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-32"></span><span>  </span><span id="BranchIndex"><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-var">BranchIndex</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-comment">{-|
+  Finds the first index of a type in a list of types. The type list and the
+  type being searched for must be inferrable based on the usage, or be
+  supplied via @TypeApplications@.
+-}</span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span id="local-6989586621679036290"><span id="local-6989586621679036291"><span id="local-6989586621679036292"><span class="annot"><a href="Shrubbery.BranchIndex.html#firstIndexOfType"><span class="hs-identifier hs-type">firstIndexOfType</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KnownNat</span></span><span> </span><span class="annot"><a href="#local-6989586621679036292"><span class="hs-identifier hs-type">branchIndex</span></a></span><span>
+</span><span id="line-41"></span><span>                    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679036292"><span class="hs-identifier hs-type">branchIndex</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">~</span></span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#FirstIndexOf"><span class="hs-identifier hs-type">FirstIndexOf</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036291"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036290"><span class="hs-identifier hs-type">types</span></a></span><span>
+</span><span id="line-42"></span><span>                    </span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>                 </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036291"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036290"><span class="hs-identifier hs-type">types</span></a></span></span></span></span><span>
+</span><span id="line-44"></span><span id="firstIndexOfType"><span class="annot"><span class="annottext">firstIndexOfType :: BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#firstIndexOfType"><span class="hs-identifier hs-var hs-var">firstIndexOfType</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-45"></span><span>  </span><span class="annot"><span class="annottext">Proxy branchIndex -&gt; BranchIndex t types
+forall (branchIndex :: Nat) t (types :: [*]).
+(KnownNat branchIndex, branchIndex ~ FirstIndexOf t types) =&gt;
+Proxy branchIndex -&gt; BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#firstIndexOfTypeByProxy"><span class="hs-identifier hs-var">firstIndexOfTypeByProxy</span></a></span><span> </span><span class="annot"><span class="annottext">Proxy branchIndex
+forall k (t :: k). Proxy t
+</span><span class="hs-identifier hs-var">Proxy</span></span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span id="local-6989586621679036339"><span id="local-6989586621679036340"><span id="local-6989586621679036341"><span class="annot"><a href="Shrubbery.BranchIndex.html#firstIndexOfTypeByProxy"><span class="hs-identifier hs-type">firstIndexOfTypeByProxy</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KnownNat</span></span><span> </span><span class="annot"><a href="#local-6989586621679036341"><span class="hs-identifier hs-type">branchIndex</span></a></span><span>
+</span><span id="line-48"></span><span>                           </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679036341"><span class="hs-identifier hs-type">branchIndex</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">~</span></span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#FirstIndexOf"><span class="hs-identifier hs-type">FirstIndexOf</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036340"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036339"><span class="hs-identifier hs-type">types</span></a></span><span>
+</span><span id="line-49"></span><span>                           </span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span>                        </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Proxy</span></span><span> </span><span class="annot"><a href="#local-6989586621679036341"><span class="hs-identifier hs-type">branchIndex</span></a></span><span>
+</span><span id="line-51"></span><span>                        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036340"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036339"><span class="hs-identifier hs-type">types</span></a></span></span></span></span><span>
+</span><span id="line-52"></span><span id="firstIndexOfTypeByProxy"><span class="annot"><span class="annottext">firstIndexOfTypeByProxy :: Proxy branchIndex -&gt; BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#firstIndexOfTypeByProxy"><span class="hs-identifier hs-var hs-var">firstIndexOfTypeByProxy</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-53"></span><span>  </span><span class="annot"><span class="annottext">Int -&gt; BranchIndex t types
+forall t (types :: [*]). Int -&gt; BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-var">BranchIndex</span></a></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; BranchIndex t types)
+-&gt; (Proxy branchIndex -&gt; Int)
+-&gt; Proxy branchIndex
+-&gt; BranchIndex t types
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Int
+forall a. Num a =&gt; Integer -&gt; a
+</span><span class="hs-identifier hs-var">fromInteger</span></span><span> </span><span class="annot"><span class="annottext">(Integer -&gt; Int)
+-&gt; (Proxy branchIndex -&gt; Integer) -&gt; Proxy branchIndex -&gt; Int
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Proxy branchIndex -&gt; Integer
+forall (n :: Nat) (proxy :: Nat -&gt; *).
+KnownNat n =&gt;
+proxy n -&gt; Integer
+</span><span class="hs-identifier hs-var">natVal</span></span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span class="hs-comment">{-|
+  Builds an index based on an known index value from the type system,
+  associating it with the appropriate type from the list. The index is
+  specified via a proxy value.
+-}</span><span>
+</span><span id="line-60"></span><span id="local-6989586621679036284"><span id="local-6989586621679036285"><span id="local-6989586621679036286"><span id="local-6989586621679036287"><span class="annot"><a href="Shrubbery.BranchIndex.html#indexOfTypeAt"><span class="hs-identifier hs-type">indexOfTypeAt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KnownNat</span></span><span> </span><span class="annot"><a href="#local-6989586621679036287"><span class="hs-identifier hs-type">branchIndex</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679036286"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">~</span></span><span> </span><span class="annot"><a href="Shrubbery.TypeList.html#TypeAtIndex"><span class="hs-identifier hs-type">TypeAtIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036287"><span class="hs-identifier hs-type">branchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036285"><span class="hs-identifier hs-type">types</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span>              </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679036284"><span class="hs-identifier hs-type">proxy</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036287"><span class="hs-identifier hs-type">branchIndex</span></a></span><span>
+</span><span id="line-62"></span><span>              </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036286"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036285"><span class="hs-identifier hs-type">types</span></a></span></span></span></span></span><span>
+</span><span id="line-63"></span><span id="indexOfTypeAt"><span class="annot"><span class="annottext">indexOfTypeAt :: proxy branchIndex -&gt; BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#indexOfTypeAt"><span class="hs-identifier hs-var hs-var">indexOfTypeAt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-64"></span><span>  </span><span class="annot"><span class="annottext">Int -&gt; BranchIndex t types
+forall t (types :: [*]). Int -&gt; BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-var">BranchIndex</span></a></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; BranchIndex t types)
+-&gt; (proxy branchIndex -&gt; Int)
+-&gt; proxy branchIndex
+-&gt; BranchIndex t types
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Int
+forall a. Num a =&gt; Integer -&gt; a
+</span><span class="hs-identifier hs-var">fromInteger</span></span><span> </span><span class="annot"><span class="annottext">(Integer -&gt; Int)
+-&gt; (proxy branchIndex -&gt; Integer) -&gt; proxy branchIndex -&gt; Int
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">proxy branchIndex -&gt; Integer
+forall (n :: Nat) (proxy :: Nat -&gt; *).
+KnownNat n =&gt;
+proxy n -&gt; Integer
+</span><span class="hs-identifier hs-var">natVal</span></span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span class="hs-comment">{-|
+  Retrieves the 'Int' representation of the branch index. It it up to the
+  caller to use this integer in a responsible fashion ;)
+-}</span><span>
+</span><span id="line-70"></span><span id="local-6989586621679036282"><span id="local-6989586621679036283"><span class="annot"><a href="Shrubbery.BranchIndex.html#branchIndexToInt"><span class="hs-identifier hs-type">branchIndexToInt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036283"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036282"><span class="hs-identifier hs-type">types</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span></span></span><span>
+</span><span id="line-71"></span><span id="branchIndexToInt"><span class="annot"><span class="annottext">branchIndexToInt :: BranchIndex t types -&gt; Int
+</span><a href="Shrubbery.BranchIndex.html#branchIndexToInt"><span class="hs-identifier hs-var hs-var">branchIndexToInt</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span id="local-6989586621679036281"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036281"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-72"></span><span>  </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036281"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="hs-comment">{-|
+  'TypeZipper' facilitates interating through a list of known types while
+  keeping track of the index as you go. You might need this if you're keeping
+  track of a list of operations that use shrubbery functions that require a
+  branch index, such as 'Shrubbery.Classes.unifyWithIndex'.
+
+  Note: Types are added to the top of the @front@ list as the are encountered,
+  so the list may be reversed from you expected. See the type of 'nextZipper'.
+-}</span><span>
+</span><span id="line-83"></span><span class="hs-keyword">newtype</span><span> </span><span id="TypeZipper"><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-var">TypeZipper</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679036315"><span class="annot"><a href="#local-6989586621679036315"><span class="hs-identifier hs-type">front</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Type</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679036314"><span class="annot"><a href="#local-6989586621679036314"><span class="hs-identifier hs-type">focus</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Type</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679036313"><span class="annot"><a href="#local-6989586621679036313"><span class="hs-identifier hs-type">back</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Type</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-84"></span><span>  </span><span id="TypeZipper"><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-var">TypeZipper</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-85"></span><span>
+</span><span id="line-86"></span><span class="hs-comment">{-|
+  Initializes a 'TypeZipper' at the start of the type list
+-}</span><span>
+</span><span id="line-89"></span><span id="local-6989586621679036278"><span id="local-6989586621679036279"><span class="annot"><a href="Shrubbery.BranchIndex.html#startZipper"><span class="hs-identifier hs-type">startZipper</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-type">TypeZipper</span></a></span><span> </span><span class="hs-special">'</span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679036279"><span class="hs-identifier hs-type">first</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036278"><span class="hs-identifier hs-type">back</span></a></span></span></span><span>
+</span><span id="line-90"></span><span id="startZipper"><span class="annot"><span class="annottext">startZipper :: TypeZipper '[] first back
+</span><a href="Shrubbery.BranchIndex.html#startZipper"><span class="hs-identifier hs-var hs-var">startZipper</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-91"></span><span>  </span><span class="annot"><span class="annottext">Int -&gt; TypeZipper '[] first back
+forall (front :: [*]) focus (back :: [*]).
+Int -&gt; TypeZipper front focus back
+</span><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-var">TypeZipper</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span class="hs-comment">{-|
+  Moves the zipper to the next type in the list. The currently focused item
+  is added to the to the beginning of the @front@ list.
+-}</span><span>
+</span><span id="line-97"></span><span id="local-6989586621679036273"><span id="local-6989586621679036274"><span id="local-6989586621679036275"><span id="local-6989586621679036276"><span id="local-6989586621679036277"><span class="annot"><a href="Shrubbery.BranchIndex.html#moveZipperNext"><span class="hs-identifier hs-type">moveZipperNext</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-type">TypeZipper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036277"><span class="hs-identifier hs-type">front</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036276"><span class="hs-identifier hs-type">focus</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036275"><span class="hs-identifier hs-type">next</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><a href="#local-6989586621679036274"><span class="hs-identifier hs-type">back</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-98"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-type">TypeZipper</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679036276"><span class="hs-identifier hs-type">focus</span></a></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><a href="#local-6989586621679036277"><span class="hs-identifier hs-type">front</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679036275"><span class="hs-identifier hs-type">next</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036273"><span class="hs-identifier hs-type">rest</span></a></span></span></span></span></span></span><span>
+</span><span id="line-99"></span><span id="moveZipperNext"><span class="annot"><span class="annottext">moveZipperNext :: TypeZipper front focus (next : back)
+-&gt; TypeZipper (focus : front) next rest
+</span><a href="Shrubbery.BranchIndex.html#moveZipperNext"><span class="hs-identifier hs-var hs-var">moveZipperNext</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-type">TypeZipper</span></a></span><span> </span><span id="local-6989586621679036272"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036272"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-100"></span><span>  </span><span class="annot"><span class="annottext">Int -&gt; TypeZipper (focus : front) next rest
+forall (front :: [*]) focus (back :: [*]).
+Int -&gt; TypeZipper front focus back
+</span><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-var">TypeZipper</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036272"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-101"></span><span>
+</span><span id="line-102"></span><span class="hs-comment">{-|
+  Builds a 'BranchIndex' for the currently focused type of the zipper. This
+  index can then be used with other functions such as
+  'Shrubbery.Classes.unifyWithIndex'.
+-}</span><span>
+</span><span id="line-107"></span><span id="local-6989586621679036267"><span id="local-6989586621679036268"><span id="local-6989586621679036269"><span id="local-6989586621679036270"><span class="annot"><a href="Shrubbery.BranchIndex.html#indexOfFocusedType"><span class="hs-identifier hs-type">indexOfFocusedType</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-type">TypeZipper</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036270"><span class="hs-identifier hs-type">front</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036269"><span class="hs-identifier hs-type">focus</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036268"><span class="hs-identifier hs-type">back</span></a></span><span>
+</span><span id="line-108"></span><span>                   </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-type">BranchIndex</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036267"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.TypeList.html#ZippedTypes"><span class="hs-identifier hs-type">ZippedTypes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036270"><span class="hs-identifier hs-type">front</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036269"><span class="hs-identifier hs-type">focus</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679036268"><span class="hs-identifier hs-type">back</span></a></span><span class="hs-special">)</span></span></span></span></span><span>
+</span><span id="line-109"></span><span id="indexOfFocusedType"><span class="annot"><span class="annottext">indexOfFocusedType :: TypeZipper front focus back
+-&gt; BranchIndex t (ZippedTypes front focus back)
+</span><a href="Shrubbery.BranchIndex.html#indexOfFocusedType"><span class="hs-identifier hs-var hs-var">indexOfFocusedType</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Shrubbery.BranchIndex.html#TypeZipper"><span class="hs-identifier hs-type">TypeZipper</span></a></span><span> </span><span id="local-6989586621679036266"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036266"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-110"></span><span>  </span><span class="annot"><span class="annottext">Int -&gt; BranchIndex t (ZippedTypes front focus back)
+forall t (types :: [*]). Int -&gt; BranchIndex t types
+</span><a href="Shrubbery.BranchIndex.html#BranchIndex"><span class="hs-identifier hs-var">BranchIndex</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679036266"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-111"></span><span>
+</span><span id="line-112"></span></pre></body></html>
