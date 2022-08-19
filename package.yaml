@@ -1,5 +1,5 @@
 name:                shrubbery
-version:             0.1.0.0
+version:             0.1.1.0
 github:              "flipstone/shrubbery"
 license:             BSD3
 author:              "Flipstone Technology Partners, Inc"
@@ -36,6 +36,7 @@ library:
     - Shrubbery.Classes
     - Shrubbery.Branches
     - Shrubbery.BranchIndex
+    - Shrubbery.Generic
     - Shrubbery.Parser
     - Shrubbery.Union
     - Shrubbery.TypeList

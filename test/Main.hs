@@ -1,11 +1,15 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Main
   ( main
   ) where
 
 import           Data.Proxy (Proxy(Proxy))
+import           GHC.Generics (Generic, Rep)
 import           Hedgehog ((===))
 import qualified Hedgehog as HH
 import qualified Hedgehog.Gen as Gen
@@ -14,9 +18,11 @@ import qualified Hedgehog.Range as Range
 import           Text.Read (readMaybe)
 
 import Shrubbery.Branches
+import Shrubbery.BranchIndex
 import Shrubbery.Classes
 import Shrubbery.Union
 import Shrubbery.Parser
+import Shrubbery.Generic
 
 main :: IO ()
 main =
@@ -28,6 +34,8 @@ main =
           , ("Four way branching on index works", prop_fourWayBranchingOnIndex)
           , ("Four way union dissection", prop_fourWayUnionDissection)
           , ("Parser runs all options", prop_parserRunsAllOptions)
+          , ("Generic dissection", prop_genericDissection)
+          , ("Generic unification", prop_genericUnification)
           ]
     ]
 
@@ -190,4 +198,65 @@ prop_parserRunsAllOptions =
 
       fmap show actual === fmap show (mkExpected value)
 
+data GenericSum
+  = GenericSumBool Bool
+  | GenericSumIntA Int
+  | GenericSumIntB Int
+  | GenericSumNoData
+  deriving (Show, Eq, Generic)
 
+type instance BranchTypes GenericSum = GenericBranchTypes (Rep GenericSum)
+
+instance Dissection GenericSum where
+  dissect = genericDissect
+
+instance Unification GenericSum where
+  unifyWithIndex = genericUnifyWithIndex
+
+
+genericSumGen :: HH.Gen GenericSum
+genericSumGen =
+  Gen.choice
+    [ GenericSumBool <$> Gen.bool
+    , GenericSumIntA <$> Gen.integral @_ @Int (Range.constant minBound maxBound)
+    , GenericSumIntB <$> Gen.integral @_ @Int (Range.constant minBound maxBound)
+    , pure GenericSumNoData
+    ]
+
+prop_genericDissection :: HH.Property
+prop_genericDissection =
+  HH.property $ do
+    value <- HH.forAll genericSumGen
+
+    let
+      branches =
+        branchBuild
+        $ branch (\b -> "Bool: " <> show b)
+        $ branch (\i -> "IntA: " <> show i)
+        $ branch (\i -> "IntB: " <> show i)
+        $ branch (\() -> "NoData")
+        $ branchEnd
+
+      expected =
+        case value of
+          GenericSumBool b -> "Bool: " <> show b
+          GenericSumIntA i -> "IntA: " <> show i
+          GenericSumIntB i -> "IntB: " <> show i
+          GenericSumNoData -> "NoData"
+
+    dissect branches value === expected
+
+prop_genericUnification :: HH.Property
+prop_genericUnification =
+  HH.property $ do
+    value <- HH.forAll genericSumGen
+
+    let
+      actual =
+        case value of
+          GenericSumBool b -> unifyWithIndex index0 b
+          GenericSumIntA i -> unifyWithIndex index1 i
+          GenericSumIntB i -> unifyWithIndex index2 i
+          GenericSumNoData -> unifyWithIndex index3 ()
+
+    actual === value

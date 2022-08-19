@@ -53,6 +53,7 @@ module Shrubbery.Branches
   ( branchBuild
   , branch
   , branchEnd
+  , appendBranches
 
   , Branches
   , BranchBuilder
@@ -66,12 +67,13 @@ import           Control.Monad.ST (ST)
 import           Data.Kind (Type)
 import           Data.Proxy (Proxy(Proxy))
 import qualified Data.Primitive.Array as Arr
+import           Data.STRef (STRef, readSTRef, modifySTRef', newSTRef)
 import           GHC.Exts (Any)
 import           GHC.TypeLits (KnownNat)
 import           Unsafe.Coerce (unsafeCoerce)
 
 import           Shrubbery.BranchIndex (BranchIndex, branchIndexToInt, firstIndexOfType, indexOfTypeAt)
-import           Shrubbery.TypeList (KnownLength(lengthOfTypes), FirstIndexOf,  TypeAtIndex)
+import           Shrubbery.TypeList (KnownLength(lengthOfTypes), FirstIndexOf,  TypeAtIndex, AppendTypes)
 
 {-|
   'Branches' contains an array of functions that have different parameter
@@ -86,7 +88,7 @@ newtype Branches (paramTypes :: [Type]) result =
   Use 'branchBuild' to "execute" the 'BranchBuilder' to make 'Branches'.
 -}
 newtype BranchBuilder (paramTypes :: [Type]) result =
-  BranchBuilder (forall s. Int -> Arr.MutableArray s (Any -> result) -> ST s ())
+  BranchBuilder (forall s. STRef s Int -> Arr.MutableArray s (Any -> result) -> ST s ())
 
 {-|
   Selects a function out of some 'Branches' to use for a particular value. This
@@ -151,7 +153,8 @@ branchBuild builder@(BranchBuilder populateBranches) =
   Branches $
     Arr.runArray $ do
       mutArray <- Arr.newArray (lengthOfTypes $ paramTypesProxy builder) undefined
-      populateBranches 0 mutArray
+      branchIndexRef <- newSTRef 0
+      populateBranches branchIndexRef mutArray
       pure mutArray
 
 {-|
@@ -165,9 +168,11 @@ branch :: (param -> result)
        -> BranchBuilder paramTypes result
        -> BranchBuilder (param : paramTypes) result
 branch branchFunction (BranchBuilder populateBranches) =
-  BranchBuilder $ \branchIndex array -> do
+  BranchBuilder $ \branchIndexRef array -> do
+    branchIndex <- readSTRef branchIndexRef
     Arr.writeArray array branchIndex (unsafeToBranch branchFunction)
-    populateBranches (branchIndex + 1) array
+    modifySTRef' branchIndexRef (+1)
+    populateBranches branchIndexRef array
 
 {-|
   Indicates that there are no more branches to specify. This must appear as
@@ -176,6 +181,14 @@ branch branchFunction (BranchBuilder populateBranches) =
 -}
 branchEnd :: BranchBuilder '[] result
 branchEnd = BranchBuilder $ \_ _ -> pure ()
+
+appendBranches :: BranchBuilder paramTypesA result
+               -> BranchBuilder paramTypesB result
+               -> BranchBuilder (AppendTypes paramTypesA paramTypesB) result
+appendBranches (BranchBuilder populateA) (BranchBuilder populateB) =
+  BranchBuilder $ \branchIndexRef array -> do
+    populateA branchIndexRef array
+    populateB branchIndexRef array
 
 paramTypesProxy :: BranchBuilder paramTypes result -> Proxy paramTypes
 paramTypesProxy _ =

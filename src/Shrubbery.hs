@@ -22,5 +22,6 @@ module Shrubbery
   ) where
 
 import Shrubbery.Branches as Export
+import Shrubbery.BranchIndex as Export
 import Shrubbery.Classes as Export
 import Shrubbery.Union as Export

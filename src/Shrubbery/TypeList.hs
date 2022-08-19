@@ -15,6 +15,7 @@ module Shrubbery.TypeList
   , FirstIndexOfWithMsg
   , TypeAtIndex
   , TypeAtIndexWithMsg
+  , AppendTypes
   , KnownLength(..)
   , NotAMemberMsg
   , OutOfBoundsMsg
@@ -68,6 +69,13 @@ type family TypeAtIndexWithMsg (n :: Nat) (types :: [Type]) (errMsg :: ErrorMess
   TypeAtIndexWithMsg 0 '[] errMsg = TypeError errMsg
   TypeAtIndexWithMsg 0 (t : _) _ = t
   TypeAtIndexWithMsg n (_ : rest) errMsg = TypeAtIndexWithMsg (n - 1) rest errMsg
+
+{- |
+-}
+type family AppendTypes (front :: [Type]) (back :: [Type]) where
+  AppendTypes '[] back = back
+  AppendTypes (a : rest) back = a : AppendTypes rest back
+
 
 {-|
   This is the default error message used by 'FirstIndexOf' when the type is

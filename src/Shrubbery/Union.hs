@@ -44,7 +44,7 @@
   @
 -}
 module Shrubbery.Union
-  ( Union
+  ( Union(Union)
   , unifyUnion
   , dissectUnion
   ) where
@@ -95,3 +95,5 @@ instance Dissection (Union types) where
 
 instance Unification (Union types) where
   unifyWithIndex = unifyUnion
+
+
