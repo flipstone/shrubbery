@@ -71,6 +71,7 @@ type family TypeAtIndexWithMsg (n :: Nat) (types :: [Type]) (errMsg :: ErrorMess
   TypeAtIndexWithMsg n (_ : rest) errMsg = TypeAtIndexWithMsg (n - 1) rest errMsg
 
 {- |
+  Appends two lists of types to form a single list.
 -}
 type family AppendTypes (front :: [Type]) (back :: [Type]) where
   AppendTypes '[] back = back

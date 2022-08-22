@@ -153,7 +153,21 @@ instance GenericUnion (K1 i c) where
     -- the list
     Union firstIndexOfType (unK1 k1)
 
-  -- TODO would like to make sure types match
+  {-
+    The type in this case is
+    @BranchIndex t (GenericBranchTypes (K1 i c)) -> t -> K1 i c p@
+
+    Which expands to
+    @BranchIndex t '[c] -> t -> K1 i c p@
+
+    Given that a @BranchIndex@ can only be constructed when the type it
+    picks out is actually in the list of types being indexes, we can conclude
+    that @t ~ c@, even though GHC cannot conclude this.
+
+    This and the fact that the type of @K1@ is @c -> K1 i c p@ is enough to
+    allow us to conclude @K1@ has the required type and @unsafeCoerce@ is, in
+    fact, safe here.
+  -}
   constructorForIndex _ = unsafeCoerce K1
 
 instance GenericUnion U1 where
@@ -162,7 +176,13 @@ instance GenericUnion U1 where
     -- the list
     Union firstIndexOfType ()
 
-  -- TODO would like to specify () here specifically
+  {-
+    Although there is no need to use @unsafeCoerce@ here, the same reasoning
+    that is given for the @K1@ instance of @GenericUnion@ allows us to conclude
+    that the argument passed to the constructor be of type @()@. It just so
+    happens that we do not care about its type since we as discarding the value
+    to construct the @U1@ value.
+  -}
   constructorForIndex _ = const U1
 
 
