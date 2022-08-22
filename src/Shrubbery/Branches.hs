@@ -182,6 +182,10 @@ branch branchFunction (BranchBuilder populateBranches) =
 branchEnd :: BranchBuilder '[] result
 branchEnd = BranchBuilder $ \_ _ -> pure ()
 
+{-|
+  Appends two 'BranchBuilder's to form a new 'BranchBuilder' that has branches
+  for all the types from both the original.
+-}
 appendBranches :: BranchBuilder paramTypesA result
                -> BranchBuilder paramTypesB result
                -> BranchBuilder (AppendTypes paramTypesA paramTypesB) result
