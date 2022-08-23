@@ -177,11 +177,13 @@ instance GenericUnion U1 where
     Union firstIndexOfType ()
 
   {-
-    Although there is no need to use @unsafeCoerce@ here, the same reasoning
-    that is given for the @K1@ instance of @GenericUnion@ allows us to conclude
-    that the argument passed to the constructor be of type @()@. It just so
-    happens that we do not care about its type since we as discarding the value
-    to construct the @U1@ value.
+    Ideally the implementation could be @\() -> U1@ to enforce that the type of
+    the parameter being ignored is @()@ rather than another type that contains
+    some data. We cannot do that here without using @unsafeCoerce@ because the
+    compiler cannot conclude `t ~ ()` for the same reasons described above for
+    the @K1@ implementation of @constructorForIndex@. In this case we can avoid
+    using @unsafeCoerce@ by instead ignoring the parameter being passed to the
+    constructor entirely.
   -}
   constructorForIndex _ = const U1
 
