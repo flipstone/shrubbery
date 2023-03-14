@@ -1,11 +1,11 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
 
 name:           shrubbery
-version:        0.1.1.0
+version:        0.1.2.0
 description:    Please see the README on GitHub at <https://github.com/flipstone/shrubbery#readme>
 homepage:       https://github.com/flipstone/shrubbery#readme
 bug-reports:    https://github.com/flipstone/shrubbery/issues
@@ -45,11 +45,11 @@ library
   build-depends:
       base >=4.7 && <5
     , primitive
+  default-language: Haskell2010
   if flag(ci)
     ghc-options: -O2 -Wall -Werror -Wcompat -Widentities -Wincomplete-uni-patterns -Wincomplete-patterns -Wincomplete-record-updates -Wmissing-local-signatures -Wmissing-export-lists -Wnoncanonical-monad-instances -Wpartial-fields -Wmissed-specialisations -Wno-implicit-prelude -Wno-safe -Wno-unsafe
   else
     ghc-options: -O2 -Wall -fwarn-incomplete-uni-patterns -fwarn-incomplete-record-updates
-  default-language: Haskell2010
 
 test-suite shrubbery-test
   type: exitcode-stdio-1.0

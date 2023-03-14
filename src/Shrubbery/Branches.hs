@@ -53,6 +53,7 @@ module Shrubbery.Branches
   ( branchBuild
   , branch
   , branchEnd
+  , singleBranch
   , appendBranches
 
   , Branches
@@ -167,12 +168,8 @@ branchBuild builder@(BranchBuilder populateBranches) =
 branch :: (param -> result)
        -> BranchBuilder paramTypes result
        -> BranchBuilder (param : paramTypes) result
-branch branchFunction (BranchBuilder populateBranches) =
-  BranchBuilder $ \branchIndexRef array -> do
-    branchIndex <- readSTRef branchIndexRef
-    Arr.writeArray array branchIndex (unsafeToBranch branchFunction)
-    modifySTRef' branchIndexRef (+1)
-    populateBranches branchIndexRef array
+branch =
+  appendBranches . singleBranch
 
 {-|
   Indicates that there are no more branches to specify. This must appear as
@@ -181,6 +178,19 @@ branch branchFunction (BranchBuilder populateBranches) =
 -}
 branchEnd :: BranchBuilder '[] result
 branchEnd = BranchBuilder $ \_ _ -> pure ()
+
+{-|
+  Specifies how to handle a given a single case in a standalone fashion. This
+  can be used togther with `appendBranches` to assemble a branch builder with
+  to cover all the desired cases without needing to begin with `branchEnd` and
+  add branches via `branch`.
+-}
+singleBranch :: (param -> result) -> BranchBuilder '[param] result
+singleBranch branchFunction =
+  BranchBuilder $ \branchIndexRef array -> do
+    branchIndex <- readSTRef branchIndexRef
+    Arr.writeArray array branchIndex (unsafeToBranch branchFunction)
+    modifySTRef' branchIndexRef (+1)
 
 {-|
   Appends two 'BranchBuilder's to form a new 'BranchBuilder' that has branches
