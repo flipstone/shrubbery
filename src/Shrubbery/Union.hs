@@ -2,7 +2,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
-{-|
+
+{- |
   This module provides a implementation of a sum type whose members are
   known in the type sysem and provides implementations of 'Dissection'
   and 'Unification'. It can be used as such:
@@ -43,27 +44,27 @@
         $ branchEnd
   @
 -}
-module Shrubbery.Union
-  ( Union(Union)
-  , unifyUnion
-  , dissectUnion
-  ) where
+module Shrubbery.Union (
+    Union (Union),
+    unifyUnion,
+    dissectUnion,
+) where
 
-import Shrubbery.Branches (Branches, selectBranchAtIndex)
 import Shrubbery.BranchIndex (BranchIndex)
-import Shrubbery.Classes (BranchTypes, Dissection(..), Unification(..), ShowBranches, showsPrecViaDissect)
+import Shrubbery.Branches (Branches, selectBranchAtIndex)
+import Shrubbery.Classes (BranchTypes, Dissection (..), ShowBranches, Unification (..), showsPrecViaDissect)
 import Shrubbery.TypeList (KnownLength)
 
-{-|
+{- |
   Defines a type whose value can be a value of any one of the specified types.
 -}
 data Union types where
-  Union :: BranchIndex t types -> t -> Union types
+    Union :: BranchIndex t types -> t -> Union types
 
 instance (ShowBranches types, KnownLength types) => Show (Union types) where
-  showsPrec = showsPrecViaDissect
+    showsPrec = showsPrecViaDissect
 
-{-|
+{- |
   Selects a function from the branches based on the value contained within the
   union. This choice is based entirely on the index specified (or inferred) at
   the time the union was constructed, so there is no ambiguity if a type
@@ -71,13 +72,14 @@ instance (ShowBranches types, KnownLength types) => Show (Union types) where
 
   This is also available as the 'dissect' function from the 'Dissection' class.
 -}
-dissectUnion :: Branches types result
-             -> Union types
-             -> result
+dissectUnion ::
+    Branches types result ->
+    Union types ->
+    result
 dissectUnion branches (Union branchIndex t) =
-  selectBranchAtIndex branchIndex branches t
+    selectBranchAtIndex branchIndex branches t
 
-{-|
+{- |
   Constructs a union based on the index of a member type in the list. This
   function can be used rather than 'Shrubbery.Classes.unify' to disambiguate types that appear
   multiple times in the list.
@@ -86,14 +88,12 @@ dissectUnion branches (Union branchIndex t) =
 -}
 unifyUnion :: BranchIndex t types -> t -> Union types
 unifyUnion =
-  Union
+    Union
 
 type instance BranchTypes (Union types) = types
 
 instance Dissection (Union types) where
-  dissect = dissectUnion
+    dissect = dissectUnion
 
 instance Unification (Union types) where
-  unifyWithIndex = unifyUnion
-
-
+    unifyWithIndex = unifyUnion

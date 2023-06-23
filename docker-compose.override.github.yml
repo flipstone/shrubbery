@@ -1,0 +1,6 @@
+services:
+  shrubbery:
+    environment:
+      STACK_ROOT: /stack-root
+    volumes:
+      - ./stack-root:/stack-root

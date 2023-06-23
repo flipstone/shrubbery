@@ -1,4 +1,4 @@
-{-|
+{- |
   @shrubbery@ provides programmatic branching constructs based on type-level
   lists that can be used to write the equivalent of @case@ statements when the
   number and types of cases are not known ahead of time by the programmer.
@@ -17,11 +17,11 @@
   See 'Shrubbery.Branches' for the types and functions involved in building
   and applying the case analysis itself.
 -}
-module Shrubbery
-  ( module Export
-  ) where
+module Shrubbery (
+    module Export,
+) where
 
-import Shrubbery.Branches as Export
 import Shrubbery.BranchIndex as Export
+import Shrubbery.Branches as Export
 import Shrubbery.Classes as Export
 import Shrubbery.Union as Export

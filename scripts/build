@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -e
+
+./scripts/format-repo
+./scripts/build-lib
