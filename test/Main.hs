@@ -61,7 +61,7 @@ prop_fourWayBranchingOnType =
                 , Right . Right . Right <$> ((,) <$> Gen.bool <*> Gen.bool)
                 ]
 
-        indexResult :: Show a => Int -> a -> String
+        indexResult :: (Show a) => Int -> a -> String
         indexResult n a =
             "Index " ++ show n ++ ": " ++ show a
      in
@@ -98,7 +98,7 @@ prop_fourWayBranchingOnIndex =
                 , Right . Right . Right <$> Gen.bool
                 ]
 
-        indexResult :: Show a => Int -> a -> String
+        indexResult :: (Show a) => Int -> a -> String
         indexResult n a =
             "Index " ++ show n ++ ": " ++ show a
      in
@@ -127,7 +127,7 @@ prop_fourWayUnionDissection =
                             branch (indexResult 3) $
                                 branchEnd
 
-        indexResult :: Show a => Int -> a -> String
+        indexResult :: (Show a) => Int -> a -> String
         indexResult n a =
             "Index " ++ show n ++ ": " ++ show a
      in

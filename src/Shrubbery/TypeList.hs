@@ -114,7 +114,7 @@ instance (KnownNat length, length ~ Length types) => KnownLength types where
     lengthOfTypes =
         fromInteger . natVal . typesProxyToLengthProxy
 
-typesProxyToLengthProxy :: length ~ Length types => proxy types -> Proxy length
+typesProxyToLengthProxy :: (length ~ Length types) => proxy types -> Proxy length
 typesProxyToLengthProxy _ = Proxy
 
 {- |

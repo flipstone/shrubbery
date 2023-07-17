@@ -150,7 +150,7 @@ selectBranchAtIndex branchIndex (Branches array) =
   optimized the lookup so that branch dispatching can be done in O(1) time.
 -}
 branchBuild ::
-    KnownLength paramTypes =>
+    (KnownLength paramTypes) =>
     BranchBuilder paramTypes result ->
     Branches paramTypes result
 branchBuild builder@(BranchBuilder populateBranches) =

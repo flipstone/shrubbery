@@ -146,7 +146,7 @@ class GenericUnion (rep :: Type -> Type) where
 
     constructorForIndex :: BranchIndex t (GenericBranchTypes rep) -> t -> rep p
 
-instance GenericUnion f => GenericUnion (M1 i c f) where
+instance (GenericUnion f) => GenericUnion (M1 i c f) where
     genericToUnion = genericToUnion . unM1
     constructorForIndex index = M1 . constructorForIndex index
 
