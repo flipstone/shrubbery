@@ -42,14 +42,14 @@
   specific and unique type to represent branch of your sum type if you plan to
   use 'genericDissect' and 'genericUnifyWithIndex' with it.
 -}
-module Shrubbery.Generic (
-    GenericBranchTypes,
-    genericDissect,
-    genericFromUnion,
-    genericToUnion,
-    genericUnifyWithIndex,
-    GenericUnion,
-) where
+module Shrubbery.Generic
+  ( GenericBranchTypes
+  , genericDissect
+  , genericFromUnion
+  , genericToUnion
+  , genericUnifyWithIndex
+  , GenericUnion
+  ) where
 
 import Data.Kind (Type)
 import Data.Proxy (Proxy (Proxy))
@@ -70,12 +70,12 @@ import Shrubbery.Union (Union (Union), dissectUnion)
   might not actually want to do this.
 -}
 genericDissect ::
-    (Generic a, GenericUnion (Rep a)) =>
-    Branches (GenericBranchTypes (Rep a)) result ->
-    a ->
-    result
+  (Generic a, GenericUnion (Rep a)) =>
+  Branches (GenericBranchTypes (Rep a)) result ->
+  a ->
+  result
 genericDissect branches =
-    dissectUnion branches . genericToUnion . from
+  dissectUnion branches . genericToUnion . from
 
 {- |
   'genericUnifyWithIndex' provides a suitable implementation of
@@ -86,12 +86,12 @@ genericDissect branches =
   might not actually want to do this.
 -}
 genericUnifyWithIndex ::
-    (Generic a, GenericUnion (Rep a)) =>
-    BranchIndex t (GenericBranchTypes (Rep a)) ->
-    t ->
-    a
+  (Generic a, GenericUnion (Rep a)) =>
+  BranchIndex t (GenericBranchTypes (Rep a)) ->
+  t ->
+  a
 genericUnifyWithIndex index t =
-    to (constructorForIndex index t)
+  to (constructorForIndex index t)
 
 {- |
   'genericFromUnion' allows a sum type with a 'Generic' representation of
@@ -102,11 +102,11 @@ genericUnifyWithIndex index t =
   might not actually want to do this.
 -}
 genericFromUnion ::
-    (Generic a, GenericUnion (Rep a)) =>
-    Union (GenericBranchTypes (Rep a)) ->
-    a
+  (Generic a, GenericUnion (Rep a)) =>
+  Union (GenericBranchTypes (Rep a)) ->
+  a
 genericFromUnion (Union index t) =
-    genericUnifyWithIndex index t
+  genericUnifyWithIndex index t
 
 {- |
   'GenericBranchTypes' should be as the implementation of the 'BranchTypes' family
@@ -119,10 +119,10 @@ genericFromUnion (Union index t) =
   @
 -}
 type family GenericBranchTypes (rep :: Type -> Type) :: [Type] where
-    GenericBranchTypes (M1 i c f) = GenericBranchTypes f
-    GenericBranchTypes (a :+: b) = AppendTypes (GenericBranchTypes a) (GenericBranchTypes b)
-    GenericBranchTypes (K1 i c) = '[c]
-    GenericBranchTypes U1 = '[()]
+  GenericBranchTypes (M1 i c f) = GenericBranchTypes f
+  GenericBranchTypes (a :+: b) = AppendTypes (GenericBranchTypes a) (GenericBranchTypes b)
+  GenericBranchTypes (K1 i c) = '[c]
+  GenericBranchTypes U1 = '[()]
 
 {- |
   'GenericUnion' provides sum-type analysis for GHC Generics representation of
@@ -135,88 +135,88 @@ type family GenericBranchTypes (rep :: Type -> Type) :: [Type] where
   might not actually want to do this.
 -}
 class GenericUnion (rep :: Type -> Type) where
-    -- |
-    --    'genericToUnion' allows a sum type with a 'Generic' representation of
-    --    multiple single-argument constructors to be converted to a 'Union' of its
-    --    'GenericBranchTypes'.
-    --
-    --    Warning: See the discussion in the module documentation for a reason you
-    --    might not actually want to do this.
-    genericToUnion :: rep p -> Union (GenericBranchTypes rep)
+  -- |
+  --    'genericToUnion' allows a sum type with a 'Generic' representation of
+  --    multiple single-argument constructors to be converted to a 'Union' of its
+  --    'GenericBranchTypes'.
+  --
+  --    Warning: See the discussion in the module documentation for a reason you
+  --    might not actually want to do this.
+  genericToUnion :: rep p -> Union (GenericBranchTypes rep)
 
-    constructorForIndex :: BranchIndex t (GenericBranchTypes rep) -> t -> rep p
+  constructorForIndex :: BranchIndex t (GenericBranchTypes rep) -> t -> rep p
 
-instance (GenericUnion f) => GenericUnion (M1 i c f) where
-    genericToUnion = genericToUnion . unM1
-    constructorForIndex index = M1 . constructorForIndex index
+instance GenericUnion f => GenericUnion (M1 i c f) where
+  genericToUnion = genericToUnion . unM1
+  constructorForIndex index = M1 . constructorForIndex index
 
 instance GenericUnion (K1 i c) where
-    genericToUnion k1 =
-        -- 'firstIndexOfType' is always 0 here because there is only one type in
-        -- the list
-        Union firstIndexOfType (unK1 k1)
+  genericToUnion k1 =
+    -- 'firstIndexOfType' is always 0 here because there is only one type in
+    -- the list
+    Union firstIndexOfType (unK1 k1)
 
-    {-
-      The type in this case is
-      @BranchIndex t (GenericBranchTypes (K1 i c)) -> t -> K1 i c p@
+  {-
+    The type in this case is
+    @BranchIndex t (GenericBranchTypes (K1 i c)) -> t -> K1 i c p@
 
-      Which expands to
-      @BranchIndex t '[c] -> t -> K1 i c p@
+    Which expands to
+    @BranchIndex t '[c] -> t -> K1 i c p@
 
-      Given that a @BranchIndex@ can only be constructed when the type it
-      picks out is actually in the list of types being indexes, we can conclude
-      that @t ~ c@, even though GHC cannot conclude this.
+    Given that a @BranchIndex@ can only be constructed when the type it
+    picks out is actually in the list of types being indexes, we can conclude
+    that @t ~ c@, even though GHC cannot conclude this.
 
-      This and the fact that the type of @K1@ is @c -> K1 i c p@ is enough to
-      allow us to conclude @K1@ has the required type and @unsafeCoerce@ is, in
-      fact, safe here.
-    -}
-    constructorForIndex _ = unsafeCoerce K1
+    This and the fact that the type of @K1@ is @c -> K1 i c p@ is enough to
+    allow us to conclude @K1@ has the required type and @unsafeCoerce@ is, in
+    fact, safe here.
+  -}
+  constructorForIndex _ = unsafeCoerce K1
 
 instance GenericUnion U1 where
-    genericToUnion _ =
-        -- 'firstIndexOfType' is always 0 here because there is only one type in
-        -- the list
-        Union firstIndexOfType ()
+  genericToUnion _ =
+    -- 'firstIndexOfType' is always 0 here because there is only one type in
+    -- the list
+    Union firstIndexOfType ()
 
-    {-
-      Ideally the implementation could be @\() -> U1@ to enforce that the type of
-      the parameter being ignored is @()@ rather than another type that contains
-      some data. We cannot do that here without using @unsafeCoerce@ because the
-      compiler cannot conclude `t ~ ()` for the same reasons described above for
-      the @K1@ implementation of @constructorForIndex@. In this case we can avoid
-      using @unsafeCoerce@ by instead ignoring the parameter being passed to the
-      constructor entirely.
-    -}
-    constructorForIndex _ = const U1
+  {-
+    Ideally the implementation could be @\() -> U1@ to enforce that the type of
+    the parameter being ignored is @()@ rather than another type that contains
+    some data. We cannot do that here without using @unsafeCoerce@ because the
+    compiler cannot conclude `t ~ ()` for the same reasons described above for
+    the @K1@ implementation of @constructorForIndex@. In this case we can avoid
+    using @unsafeCoerce@ by instead ignoring the parameter being passed to the
+    constructor entirely.
+  -}
+  constructorForIndex _ = const U1
 
 instance (GenericUnion a, GenericUnion b, KnownLength (GenericBranchTypes a)) => GenericUnion (a :+: b) where
-    genericToUnion genericSum =
-        case genericSum of
-            L1 left ->
-                let
-                    typesProxy = rightTypesProxy genericSum
-                 in
-                    case genericToUnion left of
-                        Union index param ->
-                            Union (appendTypesToIndex index typesProxy) param
-            R1 right ->
-                let
-                    typesProxy = leftTypesProxy genericSum
-                 in
-                    case genericToUnion right of
-                        Union index param ->
-                            Union (prependTypesToIndex index typesProxy) param
+  genericToUnion genericSum =
+    case genericSum of
+      L1 left ->
+        let
+          typesProxy = rightTypesProxy genericSum
+        in
+          case genericToUnion left of
+            Union index param ->
+              Union (appendTypesToIndex index typesProxy) param
+      R1 right ->
+        let
+          typesProxy = leftTypesProxy genericSum
+        in
+          case genericToUnion right of
+            Union index param ->
+              Union (prependTypesToIndex index typesProxy) param
 
-    constructorForIndex index =
-        case splitIndex index of
-            Left leftIndex -> L1 . constructorForIndex leftIndex
-            Right rightIndex -> R1 . constructorForIndex rightIndex
+  constructorForIndex index =
+    case splitIndex index of
+      Left leftIndex -> L1 . constructorForIndex leftIndex
+      Right rightIndex -> R1 . constructorForIndex rightIndex
 
 rightTypesProxy :: (a :+: b) p -> Proxy (GenericBranchTypes b)
 rightTypesProxy _ =
-    Proxy
+  Proxy
 
 leftTypesProxy :: (a :+: b) p -> Proxy (GenericBranchTypes a)
 leftTypesProxy _ =
-    Proxy
+  Proxy

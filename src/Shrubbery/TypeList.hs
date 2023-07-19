@@ -10,18 +10,18 @@
   this package, but they may occasionally come in useful if you find yourself
   writing your own helper functions.
 -}
-module Shrubbery.TypeList (
-    FirstIndexOf,
-    FirstIndexOfWithMsg,
-    TypeAtIndex,
-    TypeAtIndexWithMsg,
-    AppendTypes,
-    KnownLength (..),
-    NotAMemberMsg,
-    OutOfBoundsMsg,
-    Length,
-    ZippedTypes,
-) where
+module Shrubbery.TypeList
+  ( FirstIndexOf
+  , FirstIndexOfWithMsg
+  , TypeAtIndex
+  , TypeAtIndexWithMsg
+  , AppendTypes
+  , KnownLength (..)
+  , NotAMemberMsg
+  , OutOfBoundsMsg
+  , Length
+  , ZippedTypes
+  ) where
 
 import Data.Kind (Type)
 import Data.Proxy (Proxy (Proxy))
@@ -33,7 +33,7 @@ import GHC.TypeLits (ErrorMessage (..), KnownNat, Nat, TypeError, natVal, type (
   provide a nice error message when the given type is not found in the list.
 -}
 type FirstIndexOf t types =
-    FirstIndexOfWithMsg t types (NotAMemberMsg t types)
+  FirstIndexOfWithMsg t types (NotAMemberMsg t types)
 
 {- |
   Finds the first index of a type in the given list as a type-level
@@ -45,9 +45,9 @@ type FirstIndexOf t types =
   error message.
 -}
 type family FirstIndexOfWithMsg t (types :: [Type]) (errMsg :: ErrorMessage) where
-    FirstIndexOfWithMsg _ '[] errMsg = TypeError errMsg
-    FirstIndexOfWithMsg t (t : _) _ = 0
-    FirstIndexOfWithMsg t (_ : rest) errMsg = 1 + FirstIndexOfWithMsg t rest errMsg
+  FirstIndexOfWithMsg _ '[] errMsg = TypeError errMsg
+  FirstIndexOfWithMsg t (t : _) _ = 0
+  FirstIndexOfWithMsg t (_ : rest) errMsg = 1 + FirstIndexOfWithMsg t rest errMsg
 
 {- |
   This type finds the type at the given index in a list of types. It is
@@ -55,7 +55,7 @@ type family FirstIndexOfWithMsg t (types :: [Type]) (errMsg :: ErrorMessage) whe
   error message when the given type is not found in the list.
 -}
 type TypeAtIndex n types =
-    TypeAtIndexWithMsg n types (OutOfBoundsMsg n types)
+  TypeAtIndexWithMsg n types (OutOfBoundsMsg n types)
 
 {- |
   Finds the type at the given index in a list of types.
@@ -66,39 +66,39 @@ type TypeAtIndex n types =
   error message.
 -}
 type family TypeAtIndexWithMsg (n :: Nat) (types :: [Type]) (errMsg :: ErrorMessage) where
-    TypeAtIndexWithMsg 0 '[] errMsg = TypeError errMsg
-    TypeAtIndexWithMsg 0 (t : _) _ = t
-    TypeAtIndexWithMsg n (_ : rest) errMsg = TypeAtIndexWithMsg (n - 1) rest errMsg
+  TypeAtIndexWithMsg 0 '[] errMsg = TypeError errMsg
+  TypeAtIndexWithMsg 0 (t : _) _ = t
+  TypeAtIndexWithMsg n (_ : rest) errMsg = TypeAtIndexWithMsg (n - 1) rest errMsg
 
 {- |
   Appends two lists of types to form a single list.
 -}
 type family AppendTypes (front :: [Type]) (back :: [Type]) where
-    AppendTypes '[] back = back
-    AppendTypes (a : rest) back = a : AppendTypes rest back
+  AppendTypes '[] back = back
+  AppendTypes (a : rest) back = a : AppendTypes rest back
 
 {- |
   This is the default error message used by 'FirstIndexOf' when the type is
   not found.
 -}
 type NotAMemberMsg t (types :: [Type]) =
-    ( 'ShowType t
-        ':<>: 'Text " is not a member of "
-        ':<>: 'ShowType types
-    )
+  ( 'ShowType t
+      ':<>: 'Text " is not a member of "
+      ':<>: 'ShowType types
+  )
 
 {- |
   This is the default error message used by 'TypeAtIndex' when the index is
   out of bounds.
 -}
 type OutOfBoundsMsg (index :: Nat) (types :: [Type]) =
-    ( 'Text "Index "
-        ':<>: 'ShowType index
-        ':<>: 'Text " is out of bounds for the type list of length "
-        ':<>: 'ShowType (Length types)
-        ':<>: 'Text ": "
-        ':<>: 'ShowType types
-    )
+  ( 'Text "Index "
+      ':<>: 'ShowType index
+      ':<>: 'Text " is out of bounds for the type list of length "
+      ':<>: 'ShowType (Length types)
+      ':<>: 'Text ": "
+      ':<>: 'ShowType types
+  )
 
 {- |
   Similar to 'KnownNat', this class allows length of a type list that is
@@ -108,22 +108,22 @@ type OutOfBoundsMsg (index :: Nat) (types :: [Type]) =
   need to turn on @UndecidableInstances@ to use it.
 -}
 class KnownLength (types :: [Type]) where
-    lengthOfTypes :: proxy types -> Int
+  lengthOfTypes :: proxy types -> Int
 
 instance (KnownNat length, length ~ Length types) => KnownLength types where
-    lengthOfTypes =
-        fromInteger . natVal . typesProxyToLengthProxy
+  lengthOfTypes =
+    fromInteger . natVal . typesProxyToLengthProxy
 
-typesProxyToLengthProxy :: (length ~ Length types) => proxy types -> Proxy length
+typesProxyToLengthProxy :: length ~ Length types => proxy types -> Proxy length
 typesProxyToLengthProxy _ = Proxy
 
 {- |
   Used by 'KnownLength' to calculate the length of a type-level list.
 -}
 type family Length (types :: [Type]) :: Nat where
-    Length '[] = 0
-    Length (_ : rest) = 1 + Length rest
+  Length '[] = 0
+  Length (_ : rest) = 1 + Length rest
 
 type family ZippedTypes front focus back :: [Type] where
-    ZippedTypes '[] focus back = focus : back
-    ZippedTypes (a : rest) focus back = ZippedTypes rest a (focus : back)
+  ZippedTypes '[] focus back = focus : back
+  ZippedTypes (a : rest) focus back = ZippedTypes rest a (focus : back)

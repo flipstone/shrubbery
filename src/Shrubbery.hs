@@ -17,9 +17,9 @@
   See 'Shrubbery.Branches' for the types and functions involved in building
   and applying the case analysis itself.
 -}
-module Shrubbery (
-    module Export,
-) where
+module Shrubbery
+  ( module Export
+  ) where
 
 import Shrubbery.BranchIndex as Export
 import Shrubbery.Branches as Export

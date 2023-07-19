@@ -44,11 +44,11 @@
         $ branchEnd
   @
 -}
-module Shrubbery.Union (
-    Union (Union),
-    unifyUnion,
-    dissectUnion,
-) where
+module Shrubbery.Union
+  ( Union (Union)
+  , unifyUnion
+  , dissectUnion
+  ) where
 
 import Shrubbery.BranchIndex (BranchIndex)
 import Shrubbery.Branches (Branches, selectBranchAtIndex)
@@ -59,10 +59,10 @@ import Shrubbery.TypeList (KnownLength)
   Defines a type whose value can be a value of any one of the specified types.
 -}
 data Union types where
-    Union :: BranchIndex t types -> t -> Union types
+  Union :: BranchIndex t types -> t -> Union types
 
 instance (ShowBranches types, KnownLength types) => Show (Union types) where
-    showsPrec = showsPrecViaDissect
+  showsPrec = showsPrecViaDissect
 
 {- |
   Selects a function from the branches based on the value contained within the
@@ -73,11 +73,11 @@ instance (ShowBranches types, KnownLength types) => Show (Union types) where
   This is also available as the 'dissect' function from the 'Dissection' class.
 -}
 dissectUnion ::
-    Branches types result ->
-    Union types ->
-    result
+  Branches types result ->
+  Union types ->
+  result
 dissectUnion branches (Union branchIndex t) =
-    selectBranchAtIndex branchIndex branches t
+  selectBranchAtIndex branchIndex branches t
 
 {- |
   Constructs a union based on the index of a member type in the list. This
@@ -88,12 +88,12 @@ dissectUnion branches (Union branchIndex t) =
 -}
 unifyUnion :: BranchIndex t types -> t -> Union types
 unifyUnion =
-    Union
+  Union
 
 type instance BranchTypes (Union types) = types
 
 instance Dissection (Union types) where
-    dissect = dissectUnion
+  dissect = dissectUnion
 
 instance Unification (Union types) where
-    unifyWithIndex = unifyUnion
+  unifyWithIndex = unifyUnion

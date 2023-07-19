@@ -50,18 +50,18 @@
     doSomethingWithBool True
   @
 -}
-module Shrubbery.Branches (
-    branchBuild,
-    branch,
-    branchEnd,
-    singleBranch,
-    appendBranches,
-    Branches,
-    BranchBuilder,
-    selectBranch,
-    selectBranchAtIndex,
-    selectBranchAtProxy,
-) where
+module Shrubbery.Branches
+  ( branchBuild
+  , branch
+  , branchEnd
+  , singleBranch
+  , appendBranches
+  , Branches
+  , BranchBuilder
+  , selectBranch
+  , selectBranchAtIndex
+  , selectBranchAtProxy
+  ) where
 
 import Control.Monad.ST (ST)
 import Data.Kind (Type)
@@ -81,14 +81,14 @@ import Shrubbery.TypeList (AppendTypes, FirstIndexOf, KnownLength (lengthOfTypes
   the types of the input parameters, in order.
 -}
 newtype Branches (paramTypes :: [Type]) result
-    = Branches (Arr.Array (Any -> result))
+  = Branches (Arr.Array (Any -> result))
 
 {- |
   'BranchBuilder' is an efficient interface for building a 'Branches'.
   Use 'branchBuild' to "execute" the 'BranchBuilder' to make 'Branches'.
 -}
 newtype BranchBuilder (paramTypes :: [Type]) result
-    = BranchBuilder (forall s. STRef s Int -> Arr.MutableArray s (Any -> result) -> ST s ())
+  = BranchBuilder (forall s. STRef s Int -> Arr.MutableArray s (Any -> result) -> ST s ())
 
 {- |
   Selects a function out of some 'Branches' to use for a particular value. This
@@ -98,12 +98,12 @@ newtype BranchBuilder (paramTypes :: [Type]) result
   If you need to select a particular index, use 'selectBranchAtProxy'.
 -}
 selectBranch ::
-    (KnownNat branchIndex, branchIndex ~ FirstIndexOf param paramTypes) =>
-    Branches paramTypes result ->
-    param ->
-    result
+  (KnownNat branchIndex, branchIndex ~ FirstIndexOf param paramTypes) =>
+  Branches paramTypes result ->
+  param ->
+  result
 selectBranch =
-    selectBranchAtIndex firstIndexOfType
+  selectBranchAtIndex firstIndexOfType
 
 {- |
   Selects the function out of 'Branches' at the given index so that it can be
@@ -121,28 +121,28 @@ selectBranch =
   @
 -}
 selectBranchAtProxy ::
-    (KnownNat branchIndex, param ~ TypeAtIndex branchIndex paramTypes) =>
-    proxy branchIndex ->
-    Branches paramTypes result ->
-    param ->
-    result
+  (KnownNat branchIndex, param ~ TypeAtIndex branchIndex paramTypes) =>
+  proxy branchIndex ->
+  Branches paramTypes result ->
+  param ->
+  result
 selectBranchAtProxy proxy =
-    selectBranchAtIndex (indexOfTypeAt proxy)
+  selectBranchAtIndex (indexOfTypeAt proxy)
 
 {- |
   Selects the function out of 'Branches' at the given index so that it can be
   used with the correct input parameter type.
 -}
 selectBranchAtIndex ::
-    BranchIndex param paramTypes ->
-    Branches paramTypes result ->
-    param ->
-    result
+  BranchIndex param paramTypes ->
+  Branches paramTypes result ->
+  param ->
+  result
 selectBranchAtIndex branchIndex (Branches array) =
-    unsafeFromBranch $
-        Arr.indexArray
-            array
-            (branchIndexToInt branchIndex)
+  unsafeFromBranch $
+    Arr.indexArray
+      array
+      (branchIndexToInt branchIndex)
 
 {- |
   From a lexical code perspective you can think of this as "beginning" a branching
@@ -150,16 +150,16 @@ selectBranchAtIndex branchIndex (Branches array) =
   optimized the lookup so that branch dispatching can be done in O(1) time.
 -}
 branchBuild ::
-    (KnownLength paramTypes) =>
-    BranchBuilder paramTypes result ->
-    Branches paramTypes result
+  KnownLength paramTypes =>
+  BranchBuilder paramTypes result ->
+  Branches paramTypes result
 branchBuild builder@(BranchBuilder populateBranches) =
-    Branches $
-        Arr.runArray $ do
-            mutArray <- Arr.newArray (lengthOfTypes $ paramTypesProxy builder) undefined
-            branchIndexRef <- newSTRef 0
-            populateBranches branchIndexRef mutArray
-            pure mutArray
+  Branches $
+    Arr.runArray $ do
+      mutArray <- Arr.newArray (lengthOfTypes $ paramTypesProxy builder) undefined
+      branchIndexRef <- newSTRef 0
+      populateBranches branchIndexRef mutArray
+      pure mutArray
 
 {- |
   Specifies how to handle a given position in a list of types. The function
@@ -169,11 +169,11 @@ branchBuild builder@(BranchBuilder populateBranches) =
   you get a compilation error.
 -}
 branch ::
-    (param -> result) ->
-    BranchBuilder paramTypes result ->
-    BranchBuilder (param : paramTypes) result
+  (param -> result) ->
+  BranchBuilder paramTypes result ->
+  BranchBuilder (param : paramTypes) result
 branch =
-    appendBranches . singleBranch
+  appendBranches . singleBranch
 
 {- |
   Indicates that there are no more branches to specify. This must appear as
@@ -191,27 +191,27 @@ branchEnd = BranchBuilder $ \_ _ -> pure ()
 -}
 singleBranch :: (param -> result) -> BranchBuilder '[param] result
 singleBranch branchFunction =
-    BranchBuilder $ \branchIndexRef array -> do
-        branchIndex <- readSTRef branchIndexRef
-        Arr.writeArray array branchIndex (unsafeToBranch branchFunction)
-        modifySTRef' branchIndexRef (+ 1)
+  BranchBuilder $ \branchIndexRef array -> do
+    branchIndex <- readSTRef branchIndexRef
+    Arr.writeArray array branchIndex (unsafeToBranch branchFunction)
+    modifySTRef' branchIndexRef (+ 1)
 
 {- |
   Appends two 'BranchBuilder's to form a new 'BranchBuilder' that has branches
   for all the types from both the original.
 -}
 appendBranches ::
-    BranchBuilder paramTypesA result ->
-    BranchBuilder paramTypesB result ->
-    BranchBuilder (AppendTypes paramTypesA paramTypesB) result
+  BranchBuilder paramTypesA result ->
+  BranchBuilder paramTypesB result ->
+  BranchBuilder (AppendTypes paramTypesA paramTypesB) result
 appendBranches (BranchBuilder populateA) (BranchBuilder populateB) =
-    BranchBuilder $ \branchIndexRef array -> do
-        populateA branchIndexRef array
-        populateB branchIndexRef array
+  BranchBuilder $ \branchIndexRef array -> do
+    populateA branchIndexRef array
+    populateB branchIndexRef array
 
 paramTypesProxy :: BranchBuilder paramTypes result -> Proxy paramTypes
 paramTypesProxy _ =
-    Proxy
+  Proxy
 
 unsafeToBranch :: (a -> result) -> (Any -> result)
 unsafeToBranch = unsafeCoerce

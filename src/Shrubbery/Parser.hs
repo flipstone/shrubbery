@@ -48,12 +48,12 @@
       Nothing
   @
 -}
-module Shrubbery.Parser (
-    Parser,
-    parse,
-    parseOption,
-    parseEnd,
-) where
+module Shrubbery.Parser
+  ( Parser
+  , parse
+  , parseOption
+  , parseEnd
+  ) where
 
 import Data.Kind (Type)
 
@@ -68,8 +68,8 @@ import Shrubbery.TypeList (ZippedTypes)
   'Unification', such as 'Shrubby.Union.Union'.
 -}
 data Parser f input (types :: [Type]) where
-    NilParse :: Parser f input '[]
-    ConsParse :: (input -> f a) -> Parser f input rest -> Parser f input (a : rest)
+  NilParse :: Parser f input '[]
+  ConsParse :: (input -> f a) -> Parser f input rest -> Parser f input (a : rest)
 
 {- |
   Represents the base case of where no parsing options are present. You can
@@ -92,10 +92,10 @@ parseEnd = NilParse
   'parse' is used.
 -}
 parseOption ::
-    forall a f input rest.
-    (input -> f a) ->
-    Parser f input rest ->
-    Parser f input (a : rest)
+  forall a f input rest.
+  (input -> f a) ->
+  Parser f input rest ->
+  Parser f input (a : rest)
 parseOption = ConsParse
 
 {- |
@@ -108,16 +108,16 @@ parseOption = ConsParse
   of options however is desired.
 -}
 parse ::
-    (Unification sum, Functor f) =>
-    Parser f input (BranchTypes sum) ->
-    input ->
-    [f sum]
+  (Unification sum, Functor f) =>
+  Parser f input (BranchTypes sum) ->
+  input ->
+  [f sum]
 parse parser input =
-    case parser of
-        NilParse ->
-            []
-        ConsParse tryDiff diffRest ->
-            parseZipper tryDiff diffRest startZipper input
+  case parser of
+    NilParse ->
+      []
+    ConsParse tryDiff diffRest ->
+      parseZipper tryDiff diffRest startZipper input
 
 {- |
   This internal function uses a 'TypeZipper' to track the index the options
@@ -126,25 +126,25 @@ parse parser input =
   union with the appropriate index and can later be differentiated.
 -}
 parseZipper ::
-    ( Unification sum
-    , BranchTypes sum ~ ZippedTypes front a back
-    , Functor f
-    ) =>
-    (input -> f a) ->
-    Parser f input back ->
-    TypeZipper front a back ->
-    input ->
-    [f sum]
+  ( Unification sum
+  , BranchTypes sum ~ ZippedTypes front a back
+  , Functor f
+  ) =>
+  (input -> f a) ->
+  Parser f input back ->
+  TypeZipper front a back ->
+  input ->
+  [f sum]
 parseZipper f parseRest zipper input =
-    let
-        item =
-            unifyWithIndex (indexOfFocusedType zipper) <$> f input
+  let
+    item =
+      unifyWithIndex (indexOfFocusedType zipper) <$> f input
 
-        rest =
-            case parseRest of
-                NilParse ->
-                    []
-                ConsParse nextF restOfRest ->
-                    parseZipper nextF restOfRest (moveZipperNext zipper) input
-     in
-        item : rest
+    rest =
+      case parseRest of
+        NilParse ->
+          []
+        ConsParse nextF restOfRest ->
+          parseZipper nextF restOfRest (moveZipperNext zipper) input
+  in
+    item : rest

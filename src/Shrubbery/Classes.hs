@@ -34,14 +34,14 @@
           $ branchEnd
   @
 -}
-module Shrubbery.Classes (
-    BranchTypes,
-    Dissection (..),
-    Unification (..),
-    unify,
-    ShowBranches (..),
-    showsPrecViaDissect,
-) where
+module Shrubbery.Classes
+  ( BranchTypes
+  , Dissection (..)
+  , Unification (..)
+  , unify
+  , ShowBranches (..)
+  , showsPrecViaDissect
+  ) where
 
 import Data.Kind (Type)
 import GHC.TypeLits (KnownNat)
@@ -63,23 +63,23 @@ type family BranchTypes a :: [Type]
   branches for handling the cases are given via a 'Branches' value.
 -}
 class Dissection a where
-    -- |
-    --    Implementations of this must call the appropriate function in the given
-    --    branches depending on the construction of the value @a@. If 'BranchTypes a'
-    --    contains duplicate types, the implmentation should be careful to call the
-    --    correct one in each case.
-    dissect :: Branches (BranchTypes a) result -> a -> result
+  -- |
+  --    Implementations of this must call the appropriate function in the given
+  --    branches depending on the construction of the value @a@. If 'BranchTypes a'
+  --    contains duplicate types, the implmentation should be careful to call the
+  --    correct one in each case.
+  dissect :: Branches (BranchTypes a) result -> a -> result
 
 {- |
   A 'Unification' provides a means to construct a sum type by embedding the
   members of the sum.
 -}
 class Unification a where
-    -- |
-    --    Embeds a member of the sum in the sum by specifying its index. This
-    --    index-based interface is required by implementors to ensure there is not
-    --    ambiguity when 'BranchTypes a' contains duplicates.
-    unifyWithIndex :: BranchIndex t (BranchTypes a) -> t -> a
+  -- |
+  --    Embeds a member of the sum in the sum by specifying its index. This
+  --    index-based interface is required by implementors to ensure there is not
+  --    ambiguity when 'BranchTypes a' contains duplicates.
+  unifyWithIndex :: BranchIndex t (BranchTypes a) -> t -> a
 
 {- |
   Constructs a sum type by embedding a member type within it.
@@ -89,30 +89,30 @@ class Unification a where
   should use 'unifyWithIndex' to disambiguate them.
 -}
 unify ::
-    forall t a branchIndex.
-    ( KnownNat branchIndex
-    , branchIndex ~ FirstIndexOf t (BranchTypes a)
-    , Unification a
-    ) =>
-    t ->
-    a
+  forall t a branchIndex.
+  ( KnownNat branchIndex
+  , branchIndex ~ FirstIndexOf t (BranchTypes a)
+  , Unification a
+  ) =>
+  t ->
+  a
 unify =
-    unifyWithIndex firstIndexOfType
+  unifyWithIndex firstIndexOfType
 
 {- |
   'ShowBranches' is provided as a convenience for implementing 'Show' on
   sum types via 'Dissection'
 -}
 class ShowBranches types where
-    showsPrecBranches :: BranchBuilder types (Int -> ShowS)
+  showsPrecBranches :: BranchBuilder types (Int -> ShowS)
 
 instance ShowBranches '[] where
-    showsPrecBranches =
-        branchEnd
+  showsPrecBranches =
+    branchEnd
 
 instance (Show a, ShowBranches rest) => ShowBranches (a : rest) where
-    showsPrecBranches =
-        branch (flip showsPrec) showsPrecBranches
+  showsPrecBranches =
+    branch (flip showsPrec) showsPrecBranches
 
 {- |
   'showsPrecViaDissect' can be used as the implementation of
@@ -120,12 +120,12 @@ instance (Show a, ShowBranches rest) => ShowBranches (a : rest) where
   types implement 'Show'
 -}
 showsPrecViaDissect ::
-    ( Dissection a
-    , KnownLength (BranchTypes a)
-    , ShowBranches (BranchTypes a)
-    ) =>
-    Int ->
-    a ->
-    ShowS
+  ( Dissection a
+  , KnownLength (BranchTypes a)
+  , ShowBranches (BranchTypes a)
+  ) =>
+  Int ->
+  a ->
+  ShowS
 showsPrecViaDissect prec a =
-    dissect (branchBuild showsPrecBranches) a prec
+  dissect (branchBuild showsPrecBranches) a prec
