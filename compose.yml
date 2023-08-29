@@ -1,6 +1,6 @@
 services:
   shrubbery:
-    image: ghcr.io/flipstone/haskell-tools:debian-unstable-ghc-9.4.5-2023-07-18-1d8bf61
+    image: ghcr.io/flipstone/haskell-tools:debian-stable-ghc-9.4.6-2023-08-29-52330cd
     volumes:
       - .:${PROJECT_DIR}
       - flipstone_stack_root:/stack-root
