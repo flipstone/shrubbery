@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -15,17 +16,25 @@ module Shrubbery.TypeList
   , FirstIndexOfWithMsg
   , TypeAtIndex
   , TypeAtIndexWithMsg
-  , AppendTypes
+  , Append
   , KnownLength (..)
   , NotAMemberMsg
   , OutOfBoundsMsg
   , Length
   , ZippedTypes
+  , Tag (..)
+  , type (@=)
+  , TagIndex
+  , TagIndexWithMsg
+  , TagType
+  , TagTypeWithMsg
+  , TaggedTypes
+  , NotAMemberTagMsg
   ) where
 
 import Data.Kind (Type)
 import Data.Proxy (Proxy (Proxy))
-import GHC.TypeLits (ErrorMessage (..), KnownNat, Nat, TypeError, natVal, type (+), type (-))
+import GHC.TypeLits (ErrorMessage (..), KnownNat, Nat, Symbol, TypeError, natVal, type (+), type (-))
 
 {- |
   This type finds the first index of a type in the given list as a type-level
@@ -71,11 +80,11 @@ type family TypeAtIndexWithMsg (n :: Nat) (types :: [Type]) (errMsg :: ErrorMess
   TypeAtIndexWithMsg n (_ : rest) errMsg = TypeAtIndexWithMsg (n - 1) rest errMsg
 
 {- |
-  Appends two lists of types to form a single list.
+  Appends two type-level lists of form a single list.
 -}
-type family AppendTypes (front :: [Type]) (back :: [Type]) where
-  AppendTypes '[] back = back
-  AppendTypes (a : rest) back = a : AppendTypes rest back
+type family Append (front :: [k]) (back :: [k]) :: [k] where
+  Append '[] back = back
+  Append (a : rest) back = a : Append rest back
 
 {- |
   This is the default error message used by 'FirstIndexOf' when the type is
@@ -127,3 +136,38 @@ type family Length (types :: [Type]) :: Nat where
 type family ZippedTypes front focus back :: [Type] where
   ZippedTypes '[] focus back = focus : back
   ZippedTypes (a : rest) focus back = ZippedTypes rest a (focus : back)
+
+data Tag
+  = Tag Symbol Type
+
+type (@=) = 'Tag
+
+type TagIndex t (tags :: [Tag]) =
+  TagIndexWithMsg t tags (NotAMemberTagMsg t tags)
+
+type family TagIndexWithMsg t (tags :: [Tag]) (errMsg :: ErrorMessage) :: Nat where
+  TagIndexWithMsg _ '[] errMsg = TypeError errMsg
+  TagIndexWithMsg t ('Tag t _ : _) _ = 0
+  TagIndexWithMsg t (_ : rest) errMsg = 1 + TagIndexWithMsg t rest errMsg
+
+type TagType t (tags :: [Tag]) =
+  TagTypeWithMsg t tags (NotAMemberTagMsg t tags)
+
+type family TagTypeWithMsg t (tags :: [Tag]) (errMsg :: ErrorMessage) :: Type where
+  TagTypeWithMsg _ '[] errMsg = TypeError errMsg
+  TagTypeWithMsg t ('Tag t typ : _) _ = typ
+  TagTypeWithMsg t (_ : rest) errMsg = TagTypeWithMsg t rest errMsg
+
+type family TaggedTypes (tags :: [Tag]) :: [Type] where
+  TaggedTypes '[] = '[]
+  TaggedTypes ('Tag _ typ : rest) = typ : TaggedTypes rest
+
+{- |
+  This is the default error message used by 'FirstIndexOf' when the type is
+  not found.
+-}
+type NotAMemberTagMsg t (tags :: [Tag]) =
+  ( 'ShowType t
+      ':<>: 'Text " is not one of the tag symbols in "
+      ':<>: 'ShowType tags
+  )

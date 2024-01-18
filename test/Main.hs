@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Main
@@ -18,12 +19,9 @@ import qualified Hedgehog.Main as HHM
 import qualified Hedgehog.Range as Range
 import Text.Read (readMaybe)
 
-import Shrubbery.BranchIndex
-import Shrubbery.Branches
-import Shrubbery.Classes
+import Shrubbery
 import Shrubbery.Generic
 import Shrubbery.Parser
-import Shrubbery.Union
 
 main :: IO ()
 main =
@@ -34,6 +32,7 @@ main =
           [ ("Four way branching on type works", prop_fourWayBranchingOnType)
           , ("Four way branching on index works", prop_fourWayBranchingOnIndex)
           , ("Four way union dissection", prop_fourWayUnionDissection)
+          , ("Four way union tagged dissection", prop_fourWayTaggedUnionDissection)
           , ("Parser runs all options", prop_parserRunsAllOptions)
           , ("Generic dissection", prop_genericDissection)
           , ("Generic unification", prop_genericUnification)
@@ -45,12 +44,12 @@ prop_fourWayBranchingOnType =
   let
     branches :: Branches [String, Int, Bool, (Bool, Bool)] String
     branches =
-      branchBuild $
-        branch (indexResult 0) $
-          branch (indexResult 1) $
-            branch (indexResult 2) $
-              branch (indexResult 3) $
-                branchEnd
+      branchBuild
+        . branch (indexResult 0)
+        . branch (indexResult 1)
+        . branch (indexResult 2)
+        . branch (indexResult 3)
+        $ branchEnd
 
     inputGen :: HH.Gen (Either String (Either Int (Either Bool (Bool, Bool))))
     inputGen =
@@ -83,12 +82,12 @@ prop_fourWayBranchingOnIndex =
   let
     branches :: Branches [Bool, Bool, Bool, Bool] String
     branches =
-      branchBuild $
-        branch (indexResult 0) $
-          branch (indexResult 1) $
-            branch (indexResult 2) $
-              branch (indexResult 3) $
-                branchEnd
+      branchBuild
+        . branch (indexResult 0)
+        . branch (indexResult 1)
+        . branch (indexResult 2)
+        . branch (indexResult 3)
+        $ branchEnd
 
     inputGen =
       Gen.choice
@@ -120,12 +119,12 @@ prop_fourWayUnionDissection =
   let
     branches :: Branches [String, Int, Bool, Double] String
     branches =
-      branchBuild $
-        branch (indexResult 0) $
-          branch (indexResult 1) $
-            branch (indexResult 2) $
-              branch (indexResult 3) $
-                branchEnd
+      branchBuild
+        . branch (indexResult 0)
+        . branch (indexResult 1)
+        . branch (indexResult 2)
+        . branch (indexResult 3)
+        $ branchEnd
 
     indexResult :: Show a => Int -> a -> String
     indexResult n a =
@@ -150,6 +149,62 @@ prop_fourWayUnionDissection =
             pure (unify @Double double, indexResult 3 double)
 
       dissect branches (input :: Union [String, Int, Bool, Double]) === expected
+
+prop_fourWayTaggedUnionDissection :: HH.Property
+prop_fourWayTaggedUnionDissection =
+  let
+    branches ::
+      TaggedBranches
+        [ "string" @= String
+        , "int" @= Int
+        , "bool" @= Bool
+        , "double" @= Double
+        ]
+        String
+    branches =
+      taggedBranchBuild
+        . taggedBranch @"string" (indexResult 0)
+        . taggedBranch @"int" (indexResult 1)
+        . taggedBranch @"bool" (indexResult 2)
+        . taggedBranch @"double" (indexResult 3)
+        $ taggedBranchEnd
+
+    indexResult :: Show a => Int -> a -> String
+    indexResult n a =
+      "Index " ++ show n ++ ": " ++ show a
+  in
+    HH.property $ do
+      dissectionCase <- HH.forAll Gen.enumBounded
+
+      (input, expected) <-
+        case dissectionCase of
+          DissectString -> do
+            string <- HH.forAll $ Gen.string (Range.constant 0 10) Gen.unicodeAll
+            pure (unifyTaggedUnion @"string" string, indexResult 0 string)
+          DissectInt -> do
+            int <- HH.forAll $ Gen.integral (Range.constant minBound maxBound)
+            pure (unifyTaggedUnion @"int" int, indexResult 1 int)
+          DissectBool -> do
+            bool <- HH.forAll $ Gen.bool
+            pure (unifyTaggedUnion @"bool" bool, indexResult 2 bool)
+          DissectDouble -> do
+            double <- HH.forAll $ Gen.double (Range.constant 0 100)
+            pure (unifyTaggedUnion @"double" double, indexResult 3 double)
+
+      let
+        result =
+          dissectTaggedUnion
+            branches
+            ( input ::
+                TaggedUnion
+                  [ "string" @= String
+                  , "int" @= Int
+                  , "bool" @= Bool
+                  , "double" @= Double
+                  ]
+            )
+
+      result === expected
 
 data DissectionCase
   = DissectString
@@ -221,12 +276,12 @@ prop_genericDissection =
 
     let
       branches =
-        branchBuild $
-          branch (\b -> "Bool: " <> show b) $
-            branch (\i -> "IntA: " <> show i) $
-              branch (\i -> "IntB: " <> show i) $
-                branch (\() -> "NoData") $
-                  branchEnd
+        branchBuild
+          . branch (\b -> "Bool: " <> show b)
+          . branch (\i -> "IntA: " <> show i)
+          . branch (\i -> "IntB: " <> show i)
+          . branch (\() -> "NoData")
+          $ branchEnd
 
       expected =
         case value of

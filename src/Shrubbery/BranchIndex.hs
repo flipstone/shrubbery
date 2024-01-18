@@ -126,7 +126,7 @@ import Data.Kind (Type)
 import Data.Proxy (Proxy (Proxy))
 import GHC.TypeLits (KnownNat, natVal)
 
-import Shrubbery.TypeList (AppendTypes, FirstIndexOf, KnownLength (lengthOfTypes), TypeAtIndex, ZippedTypes)
+import Shrubbery.TypeList (Append, FirstIndexOf, KnownLength (lengthOfTypes), TypeAtIndex, ZippedTypes)
 
 {- |
   A 'BranchIndex' is an zero-based index into a list of types for which
@@ -186,7 +186,7 @@ branchIndexToInt (BranchIndex n) =
 appendTypesToIndex ::
   BranchIndex t types ->
   Proxy moreTypes ->
-  BranchIndex t (AppendTypes types moreTypes)
+  BranchIndex t (Append types moreTypes)
 appendTypesToIndex (BranchIndex n) _ =
   -- Appending types does not change the index of our type into the list
   BranchIndex n
@@ -201,7 +201,7 @@ prependTypesToIndex ::
   KnownLength moreTypes =>
   BranchIndex t types ->
   Proxy moreTypes ->
-  BranchIndex t (AppendTypes moreTypes types)
+  BranchIndex t (Append moreTypes types)
 prependTypesToIndex (BranchIndex n) moreTypes =
   -- Prepending types pushes the index out by however many types were added
   BranchIndex (n + lengthOfTypes moreTypes)
@@ -215,7 +215,7 @@ prependTypesToIndex (BranchIndex n) moreTypes =
 splitIndex ::
   forall typesA typesB t.
   KnownLength typesA =>
-  BranchIndex t (AppendTypes typesA typesB) ->
+  BranchIndex t (Append typesA typesB) ->
   Either (BranchIndex t typesA) (BranchIndex t typesB)
 splitIndex (BranchIndex n) =
   let

@@ -24,4 +24,6 @@ module Shrubbery
 import Shrubbery.BranchIndex as Export
 import Shrubbery.Branches as Export
 import Shrubbery.Classes as Export
+import Shrubbery.TaggedUnion as Export
+import Shrubbery.TypeList as Export
 import Shrubbery.Union as Export

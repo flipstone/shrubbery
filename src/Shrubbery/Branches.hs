@@ -73,7 +73,7 @@ import GHC.TypeLits (KnownNat)
 import Unsafe.Coerce (unsafeCoerce)
 
 import Shrubbery.BranchIndex (BranchIndex, branchIndexToInt, firstIndexOfType, indexOfTypeAt)
-import Shrubbery.TypeList (AppendTypes, FirstIndexOf, KnownLength (lengthOfTypes), TypeAtIndex)
+import Shrubbery.TypeList (Append, FirstIndexOf, KnownLength (lengthOfTypes), TypeAtIndex)
 
 {- |
   'Branches' contains an array of functions that have different parameter
@@ -203,7 +203,7 @@ singleBranch branchFunction =
 appendBranches ::
   BranchBuilder paramTypesA result ->
   BranchBuilder paramTypesB result ->
-  BranchBuilder (AppendTypes paramTypesA paramTypesB) result
+  BranchBuilder (Append paramTypesA paramTypesB) result
 appendBranches (BranchBuilder populateA) (BranchBuilder populateB) =
   BranchBuilder $ \branchIndexRef array -> do
     populateA branchIndexRef array

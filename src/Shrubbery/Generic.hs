@@ -58,7 +58,7 @@ import Unsafe.Coerce (unsafeCoerce)
 
 import Shrubbery.BranchIndex (BranchIndex, appendTypesToIndex, firstIndexOfType, prependTypesToIndex, splitIndex)
 import Shrubbery.Branches (Branches)
-import Shrubbery.TypeList (AppendTypes, KnownLength)
+import Shrubbery.TypeList (Append, KnownLength)
 import Shrubbery.Union (Union (Union), dissectUnion)
 
 {- |
@@ -120,7 +120,7 @@ genericFromUnion (Union index t) =
 -}
 type family GenericBranchTypes (rep :: Type -> Type) :: [Type] where
   GenericBranchTypes (M1 i c f) = GenericBranchTypes f
-  GenericBranchTypes (a :+: b) = AppendTypes (GenericBranchTypes a) (GenericBranchTypes b)
+  GenericBranchTypes (a :+: b) = Append (GenericBranchTypes a) (GenericBranchTypes b)
   GenericBranchTypes (K1 i c) = '[c]
   GenericBranchTypes U1 = '[()]
 
