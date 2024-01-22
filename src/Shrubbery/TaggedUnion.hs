@@ -12,6 +12,7 @@ module Shrubbery.TaggedUnion
   , dissectTaggedUnion
   , TaggedBranchBuilder
   , taggedBranch
+  , taggedSingleBranch
   , taggedBranchEnd
   , appendTaggedBranches
   ) where
@@ -77,17 +78,17 @@ taggedBranch ::
   TaggedBranchBuilder taggedTypes result ->
   TaggedBranchBuilder ((tag @= typ) : taggedTypes) result
 taggedBranch =
-  appendTaggedBranches . singleTaggedBranch
+  appendTaggedBranches . taggedSingleBranch
 
 taggedBranchEnd :: TaggedBranchBuilder '[] result
 taggedBranchEnd =
   TaggedBranchBuilder branchEnd
 
-singleTaggedBranch ::
+taggedSingleBranch ::
   forall (tag :: Symbol) typ result.
   (typ -> result) ->
   TaggedBranchBuilder '[tag @= typ] result
-singleTaggedBranch branchFunction =
+taggedSingleBranch branchFunction =
   TaggedBranchBuilder (singleBranch branchFunction)
 
 appendTaggedBranches ::
