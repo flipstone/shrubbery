@@ -116,7 +116,7 @@ type OutOfBoundsMsg (index :: Nat) (types :: [Type]) =
   of functions that use this knowledge and for situations where consumers would
   need to turn on @UndecidableInstances@ to use it.
 -}
-class KnownLength (types :: [Type]) where
+class KnownLength (types :: [k]) where
   lengthOfTypes :: proxy types -> Int
 
 instance (KnownNat length, length ~ Length types) => KnownLength types where
@@ -129,11 +129,11 @@ typesProxyToLengthProxy _ = Proxy
 {- |
   Used by 'KnownLength' to calculate the length of a type-level list.
 -}
-type family Length (types :: [Type]) :: Nat where
+type family Length (types :: [k]) :: Nat where
   Length '[] = 0
   Length (_ : rest) = 1 + Length rest
 
-type family ZippedTypes front focus back :: [Type] where
+type family ZippedTypes front focus back :: [k] where
   ZippedTypes '[] focus back = focus : back
   ZippedTypes (a : rest) focus back = ZippedTypes rest a (focus : back)
 
