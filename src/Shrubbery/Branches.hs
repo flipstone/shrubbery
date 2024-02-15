@@ -17,9 +17,9 @@
     intStringOrBoolBranches :: Branches [Int, String, Bool] String
     intStringOrBoolBranches =
       branchBuild
-      $ branch doSomethingWithInt
-      $ branch doSomethingWithString
-      $ branch doSomethingWithBool
+      . branch doSomethingWithInt
+      . branch doSomethingWithString
+      . branch doSomethingWithBool
       $ branchEnd
   @
 
@@ -29,12 +29,23 @@
     intStringOrBoolBranches :: Branches [Int, String, Bool] String
     intStringOrBoolBranches =
       branchBuild
-      $ branch @Int    doSomethingWithInt
-      $ branch @String doSomethingWithString
-      $ branch @Bool   doSomethingWithBool
+      . branch @Int    doSomethingWithInt
+      . branch @String doSomethingWithString
+      . branch @Bool   doSomethingWithBool
       $ branchEnd
   @
 
+  You can also provide a default value and set specific branches. To do this
+  you must user either @TypeApplications@ (via 'branchSet') or explicit branch
+  indexes (via 'branchSetAtIndex'):
+
+  @
+    intStringOrBoolBranches :: Branches [Int, String, Bool] String
+    intStringOrBoolBranches =
+      branchBuild
+      . branchSet @String doSomethingWithString
+      $ branchDefault "default"
+  @
 
   You can then use the branch values above almost like functions to perform
   case-like analysis based on the type of value, using 'selectBranch'
@@ -56,6 +67,9 @@ module Shrubbery.Branches
   , branchEnd
   , singleBranch
   , appendBranches
+  , branchSet
+  , branchSetAtIndex
+  , branchDefault
   , Branches
   , BranchBuilder
   , selectBranch
@@ -176,9 +190,85 @@ branch =
   appendBranches . singleBranch
 
 {- |
+  Sets the function that should be used to handle values of a particular type in
+  the branch set. This function will replace the existing handler for the first
+  occurence of the type in the branches. If you wish to have more control over the
+  index, use 'branchSetAtIndex'.
+
+  See also 'branchDefault'.
+-}
+branchSet ::
+  forall param n paramTypes result.
+  ( KnownNat n
+  , n ~ FirstIndexOf param paramTypes
+  ) =>
+  (param -> result) ->
+  BranchBuilder paramTypes result ->
+  BranchBuilder paramTypes result
+branchSet =
+  let
+    branchIndex =
+      firstIndexOfType
+  in
+    branchSetAtIndex branchIndex
+
+{- |
+  Set the function that should be used to handle values at a particular index in
+  the branch set. This function will replace the existing handler at the index.
+
+  See also 'branchDefault'.
+-}
+branchSetAtIndex ::
+  BranchIndex param paramTypes ->
+  (param -> result) ->
+  BranchBuilder paramTypes result ->
+  BranchBuilder paramTypes result
+branchSetAtIndex branchIndex branchFunction (BranchBuilder populateBranches) =
+  let
+    branchOffset =
+      branchIndexToInt branchIndex
+  in
+    BranchBuilder $ \branchIndexRef array -> do
+      -- Read the index ref before we delegate to the following populateBranches
+      -- so that we know where to poke our item into the array before the ref
+      -- gets modified
+      idx <- readSTRef branchIndexRef
+      -- make the branch builder passed to us run first so that our array
+      -- entry will override whatever array entries it creates
+      populateBranches branchIndexRef array
+      Arr.writeArray array (idx + branchOffset) (unsafeToBranch branchFunction)
+
+{- |
+  Initializes a branch builder that will return the specified value for all
+  branches, regardles of the value passed to select the branch. Usually this
+  is used in conjuctions with 'branchSet' or 'branchSetAtIndex' in cases where
+  you wish to specify the behavior of only a subset of branches explicitly.
+-}
+branchDefault ::
+  result ->
+  BranchBuilder paramTypes result
+branchDefault defaultResult =
+  BranchBuilder $ \branchIndexRef array -> do
+    let
+      size =
+        Arr.sizeofMutableArray array
+
+      defaultEntry =
+        const defaultResult
+
+      setDefaultAt arrayIndex =
+        Arr.writeArray array arrayIndex (unsafeToBranch defaultEntry)
+
+    defaultStartIndex <- readSTRef branchIndexRef
+
+    -- Note: writeArray does NOT do bounds checks, so it's quite important that
+    -- we get the bounds correct here and don't overrune the array
+    mapM_ setDefaultAt [defaultStartIndex .. (size - 1)]
+
+{- |
   Indicates that there are no more branches to specify. This must appear as
   the final entry in a sequence of 'branch' calls to handle the base case of
-  an empty type list.
+  an empty type list, unless 'branchDefault' is used.
 -}
 branchEnd :: BranchBuilder '[] result
 branchEnd = BranchBuilder $ \_ _ -> pure ()

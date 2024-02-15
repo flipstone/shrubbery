@@ -31,8 +31,12 @@ main =
           "Shrubbery Tests"
           [ ("Four way branching on type works", prop_fourWayBranchingOnType)
           , ("Four way branching on index works", prop_fourWayBranchingOnIndex)
+          , ("Branching with default branches works", prop_branchingWithDefaultBranches)
+          , ("Mixing branchSet and branch on top of default", prop_mixingSetBranchAndBranchOnTopOfDefault)
+          , ("Mixing branchSet and branch on top of branchEnd", prop_mixingSetBranchAndBranchOnTopOfBranchEnd)
           , ("Four way union dissection", prop_fourWayUnionDissection)
           , ("Four way union tagged dissection", prop_fourWayTaggedUnionDissection)
+          , ("Tagged union dissection with default", prop_taggedUnionDissectionWithDefault)
           , ("Parser runs all options", prop_parserRunsAllOptions)
           , ("Generic dissection", prop_genericDissection)
           , ("Generic unification", prop_genericUnification)
@@ -114,6 +118,104 @@ prop_fourWayBranchingOnIndex =
         Right (Right (Right bool)) ->
           selectBranchAtProxy (Proxy :: Proxy 3) branches bool === indexResult 3 bool
 
+prop_branchingWithDefaultBranches :: HH.Property
+prop_branchingWithDefaultBranches =
+  let
+    branches :: Branches [String, Int, Bool] String
+    branches =
+      branchBuild
+        . branchSet @Int show
+        $ branchDefault "default-value"
+
+    inputGen :: HH.Gen (Either String (Either Int Bool))
+    inputGen =
+      Gen.choice
+        [ Left <$> Gen.string (Range.constant 0 10) Gen.unicodeAll
+        , Right . Left <$> Gen.integral (Range.constant minBound maxBound)
+        , Right . Right <$> Gen.bool
+        ]
+  in
+    HH.property $ do
+      input <- HH.forAll inputGen
+
+      case input of
+        Left string ->
+          selectBranch branches string === "default-value"
+        Right (Left int) ->
+          selectBranch branches int === show int
+        Right (Right bool) ->
+          selectBranch branches bool === "default-value"
+
+prop_mixingSetBranchAndBranchOnTopOfDefault :: HH.Property
+prop_mixingSetBranchAndBranchOnTopOfDefault =
+  let
+    branches :: Branches [(), String, Int, Bool] String
+    branches =
+      branchBuild
+        . branchSet @String (const "string-value")
+        . branch @() (const "unit-value")
+        . branch @String (const "string-value-hidden")
+        . branchSet @Int (const "int-value")
+        $ branchDefault "default-value"
+
+    inputGen :: HH.Gen (Either () (Either String (Either Int Bool)))
+    inputGen =
+      Gen.choice
+        [ pure (Left ())
+        , Right . Left <$> Gen.string (Range.constant 0 10) Gen.unicodeAll
+        , Right . Right . Left <$> Gen.integral (Range.constant minBound maxBound)
+        , Right . Right . Right <$> Gen.bool
+        ]
+  in
+    HH.property $ do
+      input <- HH.forAll inputGen
+
+      case input of
+        Left () ->
+          selectBranch branches () === "unit-value"
+        Right (Left string) ->
+          selectBranch branches string === "string-value"
+        Right (Right (Left int)) ->
+          selectBranch branches int === "int-value"
+        Right (Right (Right bool)) ->
+          selectBranch branches bool === "default-value"
+
+prop_mixingSetBranchAndBranchOnTopOfBranchEnd :: HH.Property
+prop_mixingSetBranchAndBranchOnTopOfBranchEnd =
+  let
+    branches :: Branches [(), String, Int, Bool] String
+    branches =
+      branchBuild
+        . branchSet @String (const "string-value")
+        . branch @() (const "unit-value")
+        . branch @String (const "string-value-hidden")
+        . branchSet @Bool (const "bool-value")
+        . branch @Int (const "int-value")
+        . branch @Bool (const "bool-value-hidden")
+        $ branchEnd
+
+    inputGen :: HH.Gen (Either () (Either String (Either Int Bool)))
+    inputGen =
+      Gen.choice
+        [ pure (Left ())
+        , Right . Left <$> Gen.string (Range.constant 0 10) Gen.unicodeAll
+        , Right . Right . Left <$> Gen.integral (Range.constant minBound maxBound)
+        , Right . Right . Right <$> Gen.bool
+        ]
+  in
+    HH.property $ do
+      input <- HH.forAll inputGen
+
+      case input of
+        Left () ->
+          selectBranch branches () === "unit-value"
+        Right (Left string) ->
+          selectBranch branches string === "string-value"
+        Right (Right (Left int)) ->
+          selectBranch branches int === "int-value"
+        Right (Right (Right bool)) ->
+          selectBranch branches bool === "bool-value"
+
 prop_fourWayUnionDissection :: HH.Property
 prop_fourWayUnionDissection =
   let
@@ -142,7 +244,7 @@ prop_fourWayUnionDissection =
             int <- HH.forAll $ Gen.integral (Range.constant minBound maxBound)
             pure (unify @Int int, indexResult 1 int)
           DissectBool -> do
-            bool <- HH.forAll $ Gen.bool
+            bool <- HH.forAll Gen.bool
             pure (unify @Bool bool, indexResult 2 bool)
           DissectDouble -> do
             double <- HH.forAll $ Gen.double (Range.constant 0 100)
@@ -185,11 +287,59 @@ prop_fourWayTaggedUnionDissection =
             int <- HH.forAll $ Gen.integral (Range.constant minBound maxBound)
             pure (unifyTaggedUnion @"int" int, indexResult 1 int)
           DissectBool -> do
-            bool <- HH.forAll $ Gen.bool
+            bool <- HH.forAll Gen.bool
             pure (unifyTaggedUnion @"bool" bool, indexResult 2 bool)
           DissectDouble -> do
             double <- HH.forAll $ Gen.double (Range.constant 0 100)
             pure (unifyTaggedUnion @"double" double, indexResult 3 double)
+
+      let
+        result =
+          dissectTaggedUnion
+            branches
+            ( input ::
+                TaggedUnion
+                  [ "string" @= String
+                  , "int" @= Int
+                  , "bool" @= Bool
+                  , "double" @= Double
+                  ]
+            )
+
+      result === expected
+
+prop_taggedUnionDissectionWithDefault :: HH.Property
+prop_taggedUnionDissectionWithDefault =
+  let
+    branches ::
+      TaggedBranches
+        [ "string" @= String
+        , "int" @= Int
+        , "bool" @= Bool
+        , "double" @= Double
+        ]
+        String
+
+    branches =
+      taggedBranchBuild
+        . taggedBranchSet @"int" (const "int-value")
+        . taggedBranchSet @"bool" (const "bool-value")
+        $ taggedBranchDefault "default-value"
+  in
+    HH.property $ do
+      dissectionCase <- HH.forAll Gen.enumBounded
+
+      let
+        (input, expected) =
+          case dissectionCase of
+            DissectString ->
+              (unifyTaggedUnion @"string" "foo", "default-value")
+            DissectInt ->
+              (unifyTaggedUnion @"int" 0, "int-value")
+            DissectBool ->
+              (unifyTaggedUnion @"bool" True, "bool-value")
+            DissectDouble ->
+              (unifyTaggedUnion @"double" 3.14159, "default-value")
 
       let
         result =
