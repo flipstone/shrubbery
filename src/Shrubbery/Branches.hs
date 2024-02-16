@@ -170,7 +170,10 @@ branchBuild ::
 branchBuild builder@(BranchBuilder populateBranches) =
   Branches $
     Arr.runArray $ do
-      mutArray <- Arr.newArray (lengthOfTypes $ paramTypesProxy builder) undefined
+      mutArray <-
+        Arr.newArray
+          (lengthOfTypes $ paramTypesProxy builder)
+          (error "Uninitialized Shrubbery branch handler. This is a bug in shrubbery. Please report it at https://github.com/flipstone/shrubbery/issues.")
       branchIndexRef <- newSTRef 0
       populateBranches branchIndexRef mutArray
       pure mutArray
