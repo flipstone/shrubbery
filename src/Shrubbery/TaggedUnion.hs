@@ -1,8 +1,10 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Shrubbery.TaggedUnion
   ( TaggedUnion
@@ -24,7 +26,7 @@ import GHC.TypeLits (KnownNat, Symbol)
 
 import Shrubbery.BranchIndex (BranchIndex, indexOfTypeAt)
 import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch)
-import Shrubbery.Classes (unifyWithIndex)
+import Shrubbery.Classes (EqBranches, ShowBranches, unifyWithIndex)
 import Shrubbery.TypeList (Append, KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex, type (@=))
 import Shrubbery.Union (Union, dissectUnion)
 
@@ -37,6 +39,27 @@ import Shrubbery.Union (Union, dissectUnion)
 -}
 newtype TaggedUnion (taggedTypes :: [Tag])
   = TaggedUnion (Union (TaggedTypes taggedTypes))
+
+instance
+  ( TaggedTypes taggedTypes ~ types
+  , ShowBranches types
+  , KnownLength types
+  ) =>
+  Show (TaggedUnion taggedTypes)
+  where
+  showsPrec prec (TaggedUnion union) =
+    showsPrec prec union
+
+instance
+  ( TaggedTypes taggedTypes ~ types
+  , types ~ (first : rest)
+  , EqBranches types
+  , KnownLength types
+  ) =>
+  Eq (TaggedUnion taggedTypes)
+  where
+  (==) (TaggedUnion left) (TaggedUnion right) =
+    left == right
 
 {- |
   Similar to 'Branches', 'TaggedBranches' contains an array of functions that

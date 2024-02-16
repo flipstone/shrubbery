@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -39,16 +40,18 @@ module Shrubbery.Classes
   , Dissection (..)
   , Unification (..)
   , unify
-  , ShowBranches (..)
+  , ShowBranches
   , showsPrecViaDissect
+  , EqBranches
+  , eqViaDissect
   ) where
 
 import Data.Kind (Type)
 import GHC.TypeLits (KnownNat)
 
-import Shrubbery.BranchIndex (BranchIndex, firstIndexOfType)
-import Shrubbery.Branches (BranchBuilder, Branches, branch, branchBuild, branchEnd)
-import Shrubbery.TypeList (FirstIndexOf, KnownLength)
+import Shrubbery.BranchIndex (BranchIndex, TypeZipper, firstIndexOfType, indexOfFocusedType, moveZipperNext, startZipper)
+import Shrubbery.Branches (BranchBuilder, Branches, branch, branchBuild, branchDefault, branchEnd, branchSetAtIndex)
+import Shrubbery.TypeList (FirstIndexOf, KnownLength, ZippedTypes)
 
 {- |
   This type family is used by both 'Dissection' and 'Unification' to specify
@@ -101,7 +104,8 @@ unify =
 
 {- |
   'ShowBranches' is provided as a convenience for implementing 'Show' on
-  sum types via 'Dissection'
+  sum types via 'Dissection'. See 'showsPrecViaDissect' for the most common
+  way to make use of this.
 -}
 class ShowBranches types where
   showsPrecBranches :: BranchBuilder types (Int -> ShowS)
@@ -115,9 +119,9 @@ instance (Show a, ShowBranches rest) => ShowBranches (a : rest) where
     branch (flip showsPrec) showsPrecBranches
 
 {- |
-  'showsPrecViaDissect' can be used as the implementation of
-  'showsPrec' for types that implement 'Dissection' when all the member
-  types implement 'Show'
+  'showsPrecViaDissect' can be used as the implementation of 'showsPrec' in the
+  'Show' class for types that implement 'Dissection' when all the member types
+  implement 'Show'
 -}
 showsPrecViaDissect ::
   ( Dissection a
@@ -129,3 +133,76 @@ showsPrecViaDissect ::
   ShowS
 showsPrecViaDissect prec a =
   dissect (branchBuild showsPrecBranches) a prec
+
+data EqBranchesList (allTypes :: [Type]) (someTypes :: [Type]) where
+  EqBranchesNil :: EqBranchesList allTypes '[]
+  EqBranchesCons ::
+    Eq a =>
+    EqBranchesList allTypes types ->
+    EqBranchesList allTypes (a : types)
+
+{- |
+  'EqBranches' is provided as a convenience for implementing 'Eq' on
+  sum types via 'Dissection'. See 'eqViaDissect' for the most common
+  way to make use of this.
+-}
+class EqBranches types where
+  eqBranchesList :: EqBranchesList allTypes types
+
+instance EqBranches '[] where
+  eqBranchesList =
+    EqBranchesNil
+
+instance (Eq a, EqBranches rest) => EqBranches (a : rest) where
+  eqBranchesList =
+    EqBranchesCons eqBranchesList
+
+{- |
+  'eqViaDissect' can be used as the implementation of '==' for an 'Eq' instance
+  for types that implement 'Dissection' when all the  member types implement 'Eq'
+-}
+eqViaDissect ::
+  ( Dissection a
+  , types ~ BranchTypes a
+  , EqBranches types
+  , KnownLength types
+  , types ~ (first : rest)
+  ) =>
+  a ->
+  a ->
+  Bool
+eqViaDissect a =
+  dissect (dissect eqBranches a)
+
+eqBranches ::
+  ( EqBranches types
+  , KnownLength types
+  , types ~ (first : rest)
+  ) =>
+  Branches types (Branches types Bool)
+eqBranches =
+  let
+    go ::
+      ( KnownLength allTypes
+      , allTypes ~ ZippedTypes front focus rest
+      ) =>
+      TypeZipper front focus rest ->
+      EqBranchesList allTypes (focus : rest) ->
+      BranchBuilder (focus : rest) (Branches allTypes Bool)
+    go zipper eb =
+      case eb of
+        EqBranchesCons eqBranchesRest ->
+          let
+            index =
+              indexOfFocusedType zipper
+
+            branchesRest =
+              case eqBranchesRest of
+                EqBranchesNil -> branchEnd
+                EqBranchesCons _ -> go (moveZipperNext zipper) eqBranchesRest
+          in
+            branch
+              (\a -> branchBuild . branchSetAtIndex index (a ==) $ branchDefault False)
+              branchesRest
+  in
+    branchBuild $ go startZipper eqBranchesList

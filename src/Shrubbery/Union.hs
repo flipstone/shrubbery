@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 {- |
   This module provides a implementation of a sum type whose members are
@@ -52,7 +53,7 @@ module Shrubbery.Union
 
 import Shrubbery.BranchIndex (BranchIndex)
 import Shrubbery.Branches (Branches, selectBranchAtIndex)
-import Shrubbery.Classes (BranchTypes, Dissection (..), ShowBranches, Unification (..), showsPrecViaDissect)
+import Shrubbery.Classes (BranchTypes, Dissection (..), EqBranches, ShowBranches, Unification (..), eqViaDissect, showsPrecViaDissect)
 import Shrubbery.TypeList (KnownLength)
 
 {- |
@@ -63,6 +64,9 @@ data Union types where
 
 instance (ShowBranches types, KnownLength types) => Show (Union types) where
   showsPrec = showsPrecViaDissect
+
+instance (EqBranches types, KnownLength types, types ~ (first : rest)) => Eq (Union types) where
+  (==) = eqViaDissect
 
 {- |
   Selects a function from the branches based on the value contained within the

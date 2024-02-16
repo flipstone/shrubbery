@@ -36,6 +36,7 @@ main =
           , ("Mixing branchSet and branch on top of branchEnd", prop_mixingSetBranchAndBranchOnTopOfBranchEnd)
           , ("Four way union dissection", prop_fourWayUnionDissection)
           , ("Four way union tagged dissection", prop_fourWayTaggedUnionDissection)
+          , ("Union Equality", prop_unionEquality)
           , ("Tagged union dissection with default", prop_taggedUnionDissectionWithDefault)
           , ("Parser runs all options", prop_parserRunsAllOptions)
           , ("Generic dissection", prop_genericDissection)
@@ -251,6 +252,71 @@ prop_fourWayUnionDissection =
             pure (unify @Double double, indexResult 3 double)
 
       dissect branches (input :: Union [String, Int, Bool, Double]) === expected
+
+prop_unionEquality :: HH.Property
+prop_unionEquality =
+  let
+    modelEq =
+      dissect
+        . branchBuild
+        . branch
+          ( \a ->
+              dissect
+                . branchBuild
+                . branch (== a)
+                . branch (const False)
+                . branch (const False)
+                . branch (const False)
+                $ branchEnd
+          )
+        . branch
+          ( \a ->
+              dissect
+                . branchBuild
+                . branch (const False)
+                . branch (== a)
+                . branch (const False)
+                . branch (const False)
+                $ branchEnd
+          )
+        . branch
+          ( \a ->
+              dissect
+                . branchBuild
+                . branch (const False)
+                . branch (const False)
+                . branch (== a)
+                . branch (const False)
+                $ branchEnd
+          )
+        . branch
+          ( \a ->
+              dissect
+                . branchBuild
+                . branch (const False)
+                . branch (const False)
+                . branch (const False)
+                . branch (== a)
+                $ branchEnd
+          )
+        $ branchEnd
+
+    -- Make sure the same type appears more than once to validate that our index
+    -- calculation takes this into account
+    genValue :: HH.Gen (Union [String, Int, String, Bool])
+    genValue =
+      Gen.choice
+        [ unifyWithIndex index0 <$> Gen.string (Range.linear 0 10) Gen.unicodeAll
+        , unifyWithIndex index1 <$> Gen.int (Range.linear minBound 1024)
+        , unifyWithIndex index2 <$> Gen.string (Range.linear 0 10) Gen.unicodeAll
+        , unifyWithIndex index3 <$> Gen.enumBounded
+        ]
+  in
+    HH.property $ do
+      left <- HH.forAll genValue
+      right <- HH.forAll genValue
+
+      (left == right) === modelEq left right
 
 prop_fourWayTaggedUnionDissection :: HH.Property
 prop_fourWayTaggedUnionDissection =
