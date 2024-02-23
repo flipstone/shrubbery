@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -61,6 +62,8 @@ import Shrubbery.TypeList (KnownLength)
 -}
 data Union types where
   Union :: BranchIndex t types -> t -> Union types
+
+type role Union nominal
 
 instance (ShowBranches types, KnownLength types) => Show (Union types) where
   showsPrec = showsPrecViaDissect
