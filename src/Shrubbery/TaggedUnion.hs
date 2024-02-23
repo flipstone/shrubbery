@@ -1,6 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -39,6 +40,8 @@ import Shrubbery.Union (Union, dissectUnion)
 -}
 newtype TaggedUnion (taggedTypes :: [Tag])
   = TaggedUnion (Union (TaggedTypes taggedTypes))
+
+type role TaggedUnion nominal
 
 instance
   ( TaggedTypes taggedTypes ~ types
