@@ -44,8 +44,11 @@ module Shrubbery.Classes
   , showsPrecViaDissect
   , EqBranches
   , eqViaDissect
+  , NFDataBranches
+  , rnfViaDissect
   ) where
 
+import qualified Control.DeepSeq as DeepSeq
 import Data.Kind (Type)
 import GHC.TypeLits (KnownNat)
 
@@ -206,3 +209,29 @@ eqBranches =
               branchesRest
   in
     branchBuild $ go startZipper eqBranchesList
+
+{- |
+  'rnfViaDissect' can be used as the implementation of 'DeepSeq.rnf' in the
+  'DeepSeq.NFData' class for types that implement 'Dissection' when all the member types
+  implement 'DeepSeq.NFData'
+-}
+rnfViaDissect ::
+  ( Dissection a
+  , KnownLength (BranchTypes a)
+  , NFDataBranches (BranchTypes a)
+  ) =>
+  a ->
+  ()
+rnfViaDissect =
+  dissect (branchBuild rnfBranches)
+
+class NFDataBranches types where
+  rnfBranches :: BranchBuilder types ()
+
+instance NFDataBranches '[] where
+  rnfBranches =
+    branchEnd
+
+instance (DeepSeq.NFData a, NFDataBranches rest) => NFDataBranches (a : rest) where
+  rnfBranches =
+    branch DeepSeq.rnf rnfBranches

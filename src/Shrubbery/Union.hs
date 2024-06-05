@@ -52,9 +52,11 @@ module Shrubbery.Union
   , dissectUnion
   ) where
 
+import qualified Control.DeepSeq as DeepSeq
+
 import Shrubbery.BranchIndex (BranchIndex)
 import Shrubbery.Branches (Branches, selectBranchAtIndex)
-import Shrubbery.Classes (BranchTypes, Dissection (..), EqBranches, ShowBranches, Unification (..), eqViaDissect, showsPrecViaDissect)
+import Shrubbery.Classes (BranchTypes, Dissection (..), EqBranches, NFDataBranches, ShowBranches, Unification (..), eqViaDissect, rnfViaDissect, showsPrecViaDissect)
 import Shrubbery.TypeList (KnownLength)
 
 {- |
@@ -70,6 +72,9 @@ instance (ShowBranches types, KnownLength types) => Show (Union types) where
 
 instance (EqBranches types, KnownLength types, types ~ (first : rest)) => Eq (Union types) where
   (==) = eqViaDissect
+
+instance (NFDataBranches types, KnownLength types) => DeepSeq.NFData (Union types) where
+  rnf = rnfViaDissect
 
 {- |
   Selects a function from the branches based on the value contained within the

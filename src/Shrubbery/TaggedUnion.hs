@@ -22,12 +22,13 @@ module Shrubbery.TaggedUnion
   , taggedBranchDefault
   ) where
 
+import qualified Control.DeepSeq as DeepSeq
 import Data.Proxy (Proxy (Proxy))
 import GHC.TypeLits (KnownNat, Symbol)
 
 import Shrubbery.BranchIndex (BranchIndex, indexOfTypeAt)
 import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch)
-import Shrubbery.Classes (EqBranches, ShowBranches, unifyWithIndex)
+import Shrubbery.Classes (EqBranches, NFDataBranches, ShowBranches, unifyWithIndex)
 import Shrubbery.TypeList (Append, KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex, type (@=))
 import Shrubbery.Union (Union, dissectUnion)
 
@@ -63,6 +64,16 @@ instance
   where
   (==) (TaggedUnion left) (TaggedUnion right) =
     left == right
+
+instance
+  ( TaggedTypes taggedTypes ~ types
+  , NFDataBranches types
+  , KnownLength types
+  ) =>
+  DeepSeq.NFData (TaggedUnion taggedTypes)
+  where
+  rnf (TaggedUnion union) =
+    DeepSeq.rnf union
 
 {- |
   Similar to 'Branches', 'TaggedBranches' contains an array of functions that

@@ -1,5 +1,5 @@
 name:                shrubbery
-version:             0.2.0.0
+version:             0.2.1.0
 github:              "flipstone/shrubbery"
 license:             BSD3
 author:              "Flipstone Technology Partners, Inc"
@@ -30,6 +30,8 @@ dependencies:
 
 library:
   source-dirs: src
+  dependencies:
+    - deepseq >= 1.4 && <= 1.6
   exposed-modules:
     - Shrubbery
     - Shrubbery.Classes
