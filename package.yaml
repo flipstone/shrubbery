@@ -47,6 +47,9 @@ library:
       then:
         ghc-options:
           - -O2
+          - -msse4.2
+          - -mbmi2
+          - -fspec-constr-keen
           - -Wall
           - -Werror
           - -Wcompat
@@ -59,15 +62,20 @@ library:
           - -Wnoncanonical-monad-instances
           - -Wpartial-fields
           - -Wmissed-specialisations
+          - -Wall-missed-specialisations
           - -Wno-implicit-prelude
           - -Wno-safe
           - -Wno-unsafe
       else:
         ghc-options:
           - -O2
+          - -msse4.2
+          - -mbmi2
+          - -fspec-constr-keen
           - -Wall
           - -fwarn-incomplete-uni-patterns
           - -fwarn-incomplete-record-updates
+          - -Wall-missed-specialisations
 
 tests:
   shrubbery-test:
@@ -80,6 +88,11 @@ tests:
       - -Wall
       - -Werror
       - -O2
+      - -msse4.2
+      - -mbmi2
+      - -fspec-constr-keen
+      - -Wall-missed-specialisations
+      - -Wmissed-specialisations
     dependencies:
       - shrubbery
       - hedgehog

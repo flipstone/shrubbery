@@ -68,12 +68,15 @@ data Union types where
 type role Union nominal
 
 instance (ShowBranches types, KnownLength types) => Show (Union types) where
+  {-# INLINE showsPrec #-}
   showsPrec = showsPrecViaDissect
 
 instance (EqBranches types, KnownLength types, types ~ (first : rest)) => Eq (Union types) where
+  {-# INLINE (==) #-}
   (==) = eqViaDissect
 
 instance (NFDataBranches types, KnownLength types) => DeepSeq.NFData (Union types) where
+  {-# INLINE rnf #-}
   rnf = rnfViaDissect
 
 {- |
@@ -88,6 +91,7 @@ dissectUnion ::
   Branches types result ->
   Union types ->
   result
+{-# INLINE dissectUnion #-}
 dissectUnion branches (Union branchIndex t) =
   selectBranchAtIndex branchIndex branches t
 
@@ -105,7 +109,9 @@ unifyUnion =
 type instance BranchTypes (Union types) = types
 
 instance Dissection (Union types) where
+  {-# INLINE dissect #-}
   dissect = dissectUnion
 
 instance Unification (Union types) where
+  {-# INLINE unifyWithIndex #-}
   unifyWithIndex = unifyUnion

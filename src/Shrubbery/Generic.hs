@@ -74,6 +74,7 @@ genericDissect ::
   Branches (GenericBranchTypes (Rep a)) result ->
   a ->
   result
+{-# INLINEABLE genericDissect #-}
 genericDissect branches =
   dissectUnion branches . genericToUnion . from
 
@@ -90,8 +91,9 @@ genericUnifyWithIndex ::
   BranchIndex t (GenericBranchTypes (Rep a)) ->
   t ->
   a
-genericUnifyWithIndex index t =
-  to (constructorForIndex index t)
+{-# INLINEABLE genericUnifyWithIndex #-}
+genericUnifyWithIndex index =
+  to . constructorForIndex index
 
 {- |
   'genericFromUnion' allows a sum type with a 'Generic' representation of
@@ -105,6 +107,7 @@ genericFromUnion ::
   (Generic a, GenericUnion (Rep a)) =>
   Union (GenericBranchTypes (Rep a)) ->
   a
+{-# INLINEABLE genericFromUnion #-}
 genericFromUnion (Union index t) =
   genericUnifyWithIndex index t
 
@@ -147,10 +150,13 @@ class GenericUnion (rep :: Type -> Type) where
   constructorForIndex :: BranchIndex t (GenericBranchTypes rep) -> t -> rep p
 
 instance GenericUnion f => GenericUnion (M1 i c f) where
+  {-# INLINEABLE genericToUnion #-}
   genericToUnion = genericToUnion . unM1
+  {-# INLINEABLE constructorForIndex #-}
   constructorForIndex index = M1 . constructorForIndex index
 
 instance GenericUnion (K1 i c) where
+  {-# INLINEABLE genericToUnion #-}
   genericToUnion k1 =
     -- 'firstIndexOfType' is always 0 here because there is only one type in
     -- the list
@@ -171,9 +177,11 @@ instance GenericUnion (K1 i c) where
     allow us to conclude @K1@ has the required type and @unsafeCoerce@ is, in
     fact, safe here.
   -}
+  {-# INLINEABLE constructorForIndex #-}
   constructorForIndex _ = unsafeCoerce K1
 
 instance GenericUnion U1 where
+  {-# INLINEABLE genericToUnion #-}
   genericToUnion _ =
     -- 'firstIndexOfType' is always 0 here because there is only one type in
     -- the list
@@ -188,9 +196,11 @@ instance GenericUnion U1 where
     using @unsafeCoerce@ by instead ignoring the parameter being passed to the
     constructor entirely.
   -}
+  {-# INLINEABLE constructorForIndex #-}
   constructorForIndex _ = const U1
 
 instance (GenericUnion a, GenericUnion b, KnownLength (GenericBranchTypes a)) => GenericUnion (a :+: b) where
+  {-# INLINEABLE genericToUnion #-}
   genericToUnion genericSum =
     case genericSum of
       L1 left ->
@@ -208,15 +218,18 @@ instance (GenericUnion a, GenericUnion b, KnownLength (GenericBranchTypes a)) =>
             Union index param ->
               Union (prependTypesToIndex index typesProxy) param
 
+  {-# INLINEABLE constructorForIndex #-}
   constructorForIndex index =
     case splitIndex index of
       Left leftIndex -> L1 . constructorForIndex leftIndex
       Right rightIndex -> R1 . constructorForIndex rightIndex
 
 rightTypesProxy :: (a :+: b) p -> Proxy (GenericBranchTypes b)
+{-# INLINEABLE rightTypesProxy #-}
 rightTypesProxy _ =
   Proxy
 
 leftTypesProxy :: (a :+: b) p -> Proxy (GenericBranchTypes a)
+{-# INLINEABLE leftTypesProxy #-}
 leftTypesProxy _ =
   Proxy

@@ -140,6 +140,7 @@ selectBranchAtProxy ::
   Branches paramTypes result ->
   param ->
   result
+{-# INLINEABLE selectBranchAtProxy #-}
 selectBranchAtProxy proxy =
   selectBranchAtIndex (indexOfTypeAt proxy)
 
@@ -152,6 +153,7 @@ selectBranchAtIndex ::
   Branches paramTypes result ->
   param ->
   result
+{-# INLINEABLE selectBranchAtIndex #-}
 selectBranchAtIndex branchIndex (Branches array) =
   unsafeFromBranch $
     Arr.indexArray
@@ -167,6 +169,7 @@ branchBuild ::
   KnownLength paramTypes =>
   BranchBuilder paramTypes result ->
   Branches paramTypes result
+{-# INLINE branchBuild #-}
 branchBuild builder@(BranchBuilder populateBranches) =
   Branches $
     Arr.runArray $ do
@@ -189,6 +192,7 @@ branch ::
   (param -> result) ->
   BranchBuilder paramTypes result ->
   BranchBuilder (param : paramTypes) result
+{-# INLINE branch #-}
 branch =
   appendBranches . singleBranch
 
@@ -208,6 +212,7 @@ branchSet ::
   (param -> result) ->
   BranchBuilder paramTypes result ->
   BranchBuilder paramTypes result
+{-# INLINEABLE branchSet #-}
 branchSet =
   let
     branchIndex =
@@ -226,6 +231,7 @@ branchSetAtIndex ::
   (param -> result) ->
   BranchBuilder paramTypes result ->
   BranchBuilder paramTypes result
+{-# INLINEABLE branchSetAtIndex #-}
 branchSetAtIndex branchIndex branchFunction (BranchBuilder populateBranches) =
   let
     branchOffset =
@@ -250,6 +256,7 @@ branchSetAtIndex branchIndex branchFunction (BranchBuilder populateBranches) =
 branchDefault ::
   result ->
   BranchBuilder paramTypes result
+{-# INLINE branchDefault #-}
 branchDefault defaultResult =
   BranchBuilder $ \branchIndexRef array -> do
     let
@@ -274,6 +281,7 @@ branchDefault defaultResult =
   an empty type list, unless 'branchDefault' is used.
 -}
 branchEnd :: BranchBuilder '[] result
+{-# INLINEABLE branchEnd #-}
 branchEnd = BranchBuilder $ \_ _ -> pure ()
 
 {- |
@@ -283,6 +291,7 @@ branchEnd = BranchBuilder $ \_ _ -> pure ()
   add branches via `branch`.
 -}
 singleBranch :: (param -> result) -> BranchBuilder '[param] result
+{-# INLINE singleBranch #-}
 singleBranch branchFunction =
   BranchBuilder $ \branchIndexRef array -> do
     branchIndex <- readSTRef branchIndexRef
@@ -297,6 +306,7 @@ appendBranches ::
   BranchBuilder paramTypesA result ->
   BranchBuilder paramTypesB result ->
   BranchBuilder (Append paramTypesA paramTypesB) result
+{-# INLINE appendBranches #-}
 appendBranches (BranchBuilder populateA) (BranchBuilder populateB) =
   BranchBuilder $ \branchIndexRef array -> do
     populateA branchIndexRef array

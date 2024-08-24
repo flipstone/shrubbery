@@ -102,6 +102,7 @@ unify ::
   ) =>
   t ->
   a
+{-# INLINEABLE unify #-}
 unify =
   unifyWithIndex firstIndexOfType
 
@@ -114,10 +115,12 @@ class ShowBranches types where
   showsPrecBranches :: BranchBuilder types (Int -> ShowS)
 
 instance ShowBranches '[] where
+  {-# INLINEABLE showsPrecBranches #-}
   showsPrecBranches =
     branchEnd
 
 instance (Show a, ShowBranches rest) => ShowBranches (a : rest) where
+  {-# INLINEABLE showsPrecBranches #-}
   showsPrecBranches =
     branch (flip showsPrec) showsPrecBranches
 
@@ -134,6 +137,7 @@ showsPrecViaDissect ::
   Int ->
   a ->
   ShowS
+{-# INLINEABLE showsPrecViaDissect #-}
 showsPrecViaDissect prec a =
   dissect (branchBuild showsPrecBranches) a prec
 
@@ -153,10 +157,12 @@ class EqBranches types where
   eqBranchesList :: EqBranchesList allTypes types
 
 instance EqBranches '[] where
+  {-# INLINEABLE eqBranchesList #-}
   eqBranchesList =
     EqBranchesNil
 
 instance (Eq a, EqBranches rest) => EqBranches (a : rest) where
+  {-# INLINEABLE eqBranchesList #-}
   eqBranchesList =
     EqBranchesCons eqBranchesList
 
@@ -174,6 +180,7 @@ eqViaDissect ::
   a ->
   a ->
   Bool
+{-# INLINEABLE eqViaDissect #-}
 eqViaDissect a =
   dissect (dissect eqBranches a)
 
@@ -183,6 +190,7 @@ eqBranches ::
   , types ~ (first : rest)
   ) =>
   Branches types (Branches types Bool)
+{-# INLINEABLE eqBranches #-}
 eqBranches =
   let
     go ::
@@ -222,6 +230,7 @@ rnfViaDissect ::
   ) =>
   a ->
   ()
+{-# INLINEABLE rnfViaDissect #-}
 rnfViaDissect =
   dissect (branchBuild rnfBranches)
 
@@ -229,9 +238,11 @@ class NFDataBranches types where
   rnfBranches :: BranchBuilder types ()
 
 instance NFDataBranches '[] where
+  {-# INLINEABLE rnfBranches #-}
   rnfBranches =
     branchEnd
 
 instance (DeepSeq.NFData a, NFDataBranches rest) => NFDataBranches (a : rest) where
+  {-# INLINEABLE rnfBranches #-}
   rnfBranches =
     branch DeepSeq.rnf rnfBranches

@@ -77,6 +77,7 @@ data Parser f input (types :: [Type]) where
   to specify.
 -}
 parseEnd :: Parser f input '[]
+{-# INLINEABLE parseEnd #-}
 parseEnd = NilParse
 
 {- |
@@ -96,6 +97,7 @@ parseOption ::
   (input -> f a) ->
   Parser f input rest ->
   Parser f input (a : rest)
+{-# INLINEABLE parseOption #-}
 parseOption = ConsParse
 
 {- |
@@ -112,6 +114,7 @@ parse ::
   Parser f input (BranchTypes sum) ->
   input ->
   [f sum]
+{-# INLINEABLE parse #-}
 parse parser input =
   case parser of
     NilParse ->
@@ -135,6 +138,7 @@ parseZipper ::
   TypeZipper front a back ->
   input ->
   [f sum]
+{-# INLINEABLE parseZipper #-}
 parseZipper f parseRest zipper input =
   let
     item =

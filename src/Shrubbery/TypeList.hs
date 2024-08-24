@@ -120,6 +120,7 @@ class KnownLength (types :: [k]) where
   lengthOfTypes :: proxy types -> Int
 
 instance (KnownNat length, length ~ Length types) => KnownLength types where
+  {-# INLINE lengthOfTypes #-}
   lengthOfTypes =
     fromInteger . natVal . typesProxyToLengthProxy
 

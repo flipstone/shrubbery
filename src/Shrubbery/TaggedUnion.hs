@@ -51,6 +51,7 @@ instance
   ) =>
   Show (TaggedUnion taggedTypes)
   where
+  {-# INLINEABLE showsPrec #-}
   showsPrec prec (TaggedUnion union) =
     showsPrec prec union
 
@@ -62,6 +63,7 @@ instance
   ) =>
   Eq (TaggedUnion taggedTypes)
   where
+  {-# INLINEABLE (==) #-}
   (==) (TaggedUnion left) (TaggedUnion right) =
     left == right
 
@@ -72,6 +74,7 @@ instance
   ) =>
   DeepSeq.NFData (TaggedUnion taggedTypes)
   where
+  {-# INLINEABLE rnf #-}
   rnf (TaggedUnion union) =
     DeepSeq.rnf union
 
@@ -131,6 +134,7 @@ dissectTaggedUnion ::
   TaggedBranches taggedTypes result ->
   TaggedUnion taggedTypes ->
   result
+{-# INLINEABLE dissectTaggedUnion #-}
 dissectTaggedUnion (TaggedBranches branches) (TaggedUnion union) =
   dissectUnion branches union
 
@@ -144,6 +148,7 @@ taggedBranchBuild ::
   ) =>
   TaggedBranchBuilder taggedTypes result ->
   TaggedBranches taggedTypes result
+{-# INLINEABLE taggedBranchBuild #-}
 taggedBranchBuild (TaggedBranchBuilder builder) =
   TaggedBranches (branchBuild builder)
 
@@ -169,6 +174,7 @@ taggedBranch ::
   (typ -> result) ->
   TaggedBranchBuilder taggedTypes result ->
   TaggedBranchBuilder ((tag @= typ) : taggedTypes) result
+{-# INLINEABLE taggedBranch #-}
 taggedBranch =
   appendTaggedBranches . taggedSingleBranch
 
@@ -179,6 +185,7 @@ taggedBranch =
   used.
 -}
 taggedBranchEnd :: TaggedBranchBuilder '[] result
+{-# INLINEABLE taggedBranchEnd #-}
 taggedBranchEnd =
   TaggedBranchBuilder branchEnd
 
@@ -192,8 +199,9 @@ taggedSingleBranch ::
   forall (tag :: Symbol) typ result.
   (typ -> result) ->
   TaggedBranchBuilder '[tag @= typ] result
-taggedSingleBranch branchFunction =
-  TaggedBranchBuilder (singleBranch branchFunction)
+{-# INLINEABLE taggedSingleBranch #-}
+taggedSingleBranch =
+  TaggedBranchBuilder . singleBranch
 
 {- |
   Similar to 'appendBranches'. Appends two 'TaggedBranchBuilder's to form a new
@@ -206,6 +214,7 @@ appendTaggedBranches ::
   TaggedBranchBuilder taggedTypesA result ->
   TaggedBranchBuilder taggedTypesB result ->
   TaggedBranchBuilder (Append taggedTypesA taggedTypesB) result
+{-# INLINEABLE appendTaggedBranches #-}
 appendTaggedBranches (TaggedBranchBuilder branchesA) (TaggedBranchBuilder branchesB) =
   TaggedBranchBuilder (appendBranches branchesA branchesB)
 
@@ -234,6 +243,7 @@ taggedBranchSet ::
   (typ -> result) ->
   TaggedBranchBuilder taggedTypes result ->
   TaggedBranchBuilder taggedTypes result
+{-# INLINEABLE taggedBranchSet #-}
 taggedBranchSet branchFunction (TaggedBranchBuilder builder) =
   let
     tagIndex :: Proxy n
@@ -252,5 +262,6 @@ taggedBranchSet branchFunction (TaggedBranchBuilder builder) =
   branch. Usually this is used in conjuctions with 'taggedBranchSet'.
 -}
 taggedBranchDefault :: result -> TaggedBranchBuilder taggedTypes result
-taggedBranchDefault defaultValue =
-  TaggedBranchBuilder (branchDefault defaultValue)
+{-# INLINEABLE taggedBranchDefault #-}
+taggedBranchDefault =
+  TaggedBranchBuilder . branchDefault
