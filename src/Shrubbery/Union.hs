@@ -1,7 +1,10 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RoleAnnotations #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -50,14 +53,18 @@ module Shrubbery.Union
   ( Union (Union)
   , unifyUnion
   , dissectUnion
+  , matchUnion
+  , matchUnionProxy
   ) where
 
 import qualified Control.DeepSeq as DeepSeq
+import Data.Type.Equality ((:~:) (..))
 
-import Shrubbery.BranchIndex (BranchIndex)
+import GHC.TypeLits (KnownNat)
+import Shrubbery.BranchIndex (BranchIndex, firstIndexOfType, testBranchIndexEquality)
 import Shrubbery.Branches (Branches, selectBranchAtIndex)
 import Shrubbery.Classes (BranchTypes, Dissection (..), EqBranches, NFDataBranches, ShowBranches, Unification (..), eqViaDissect, rnfViaDissect, showsPrecViaDissect)
-import Shrubbery.TypeList (KnownLength)
+import Shrubbery.TypeList (FirstIndexOf, KnownLength)
 
 {- |
   Defines a type whose value can be a value of any one of the specified types.
@@ -90,6 +97,56 @@ dissectUnion ::
   result
 dissectUnion branches (Union branchIndex t) =
   selectBranchAtIndex branchIndex branches t
+
+{- |
+  Matches a 'Union' against one of its types, returning 'Just' the value if the
+  'Union' value is of that type, or 'Nothing' otherwise. Use with @TypeApplications@:
+
+  @
+    matchUnion @Int someUnion
+  @
+
+  Note that this will always match the first instance of the type in the union types list.
+
+  See 'matchUnionProxy' for a version that does not require @TypeApplications@.
+-}
+matchUnion ::
+  forall t types branchIndex.
+  ( KnownNat branchIndex
+  , branchIndex ~ FirstIndexOf t types
+  ) =>
+  Union types ->
+  Maybe t
+matchUnion (Union branchIndex t) =
+  let
+    indexOfT :: BranchIndex t types
+    indexOfT = firstIndexOfType @branchIndex
+  in
+    case testBranchIndexEquality indexOfT branchIndex of
+      Just Refl -> Just t
+      Nothing -> Nothing
+
+{- |
+  Matches a 'Union' against one of its types, returning 'Just' the value if the
+  'Union' value is of that type, or 'Nothing' otherwise, e.g.:
+
+  @
+    matchUnionProxy (Proxy :: Proxy Int) myUnion
+  @
+
+  Note that this will always match the first instance of the type in the union types list.
+
+  See 'matchUnion' for a version that uses @TypeApplications@ instead of a proxy.
+-}
+matchUnionProxy ::
+  forall t types branchIndex proxy.
+  ( KnownNat branchIndex
+  , branchIndex ~ FirstIndexOf t types
+  ) =>
+  proxy t ->
+  Union types ->
+  Maybe t
+matchUnionProxy _ = matchUnion
 
 {- |
   Constructs a union based on the index of a member type in the list. This

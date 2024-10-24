@@ -20,6 +20,7 @@ module Shrubbery.BranchIndex
   , startZipper
   , moveZipperNext
   , indexOfFocusedType
+  , testBranchIndexEquality
   , index0
   , index1
   , index2
@@ -124,9 +125,11 @@ module Shrubbery.BranchIndex
 
 import Data.Kind (Type)
 import Data.Proxy (Proxy (Proxy))
+import Data.Type.Equality (TestEquality (testEquality), (:~:) (Refl))
 import GHC.TypeLits (KnownNat, natVal)
 
 import Shrubbery.TypeList (Append, FirstIndexOf, KnownLength (lengthOfTypes), TypeAtIndex, ZippedTypes)
+import Unsafe.Coerce (unsafeCoerce)
 
 {- |
   A 'BranchIndex' is an zero-based index into a list of types for which
@@ -135,6 +138,25 @@ import Shrubbery.TypeList (Append, FirstIndexOf, KnownLength (lengthOfTypes), Ty
 -}
 newtype BranchIndex t (types :: [Type])
   = BranchIndex Int
+
+{- |
+  Internal type used to implement 'testBranchIndexEquality'.
+-}
+newtype BranchIndexEq (types :: [Type]) t = BranchIndexEq (BranchIndex t types)
+
+instance TestEquality (BranchIndexEq types) where
+  testEquality (BranchIndexEq (BranchIndex n)) (BranchIndexEq (BranchIndex m)) =
+    if n == m
+      then Just $ unsafeCoerce Refl
+      else Nothing
+
+{- |
+  Tests two 'BranchIndex's for type equality, returning a proof of the equality
+  if they are equal. To convince the compiler of the type equality, pattern match
+  on the resulting 'Just Refl'.
+-}
+testBranchIndexEquality :: BranchIndex a types -> BranchIndex b types -> Maybe (a :~: b)
+testBranchIndexEquality a b = testEquality (BranchIndexEq a) (BranchIndexEq b)
 
 {- |
   Finds the first index of a type in a list of types. The type list and the

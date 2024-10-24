@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -41,6 +42,8 @@ main =
           , ("Parser runs all options", prop_parserRunsAllOptions)
           , ("Generic dissection", prop_genericDissection)
           , ("Generic unification", prop_genericUnification)
+          , ("matchUnion works", prop_matchUnion)
+          , ("matchTaggedUnion works", prop_matchTaggedUnion)
           ]
     ]
 
@@ -522,3 +525,150 @@ prop_genericUnification =
           GenericSumNoData -> unifyWithIndex index3 ()
 
     actual === value
+
+data MatchResult
+  = StringResult String
+  | IntResult Int
+  | BoolResult Bool
+  | DoubleResult Double
+  deriving (Eq, Show)
+
+prop_matchUnion :: HH.Property
+prop_matchUnion =
+  HH.property $ do
+    matchCase <- HH.forAll Gen.enumBounded
+
+    (input :: Union [String, Int, Bool, Double]) <-
+      case matchCase of
+        DissectString -> do
+          string <- HH.forAll $ Gen.string (Range.constant 0 10) Gen.unicodeAll
+          pure $ unify @String string
+        DissectInt -> do
+          int <- HH.forAll $ Gen.integral (Range.constant minBound maxBound)
+          pure $ unify @Int int
+        DissectBool -> do
+          bool <- HH.forAll Gen.bool
+          pure $ unify @Bool bool
+        DissectDouble -> do
+          double <- HH.forAll $ Gen.double (Range.constant 0 100)
+          pure $ unify @Double double
+
+    let
+      expectedString =
+        dissect
+          ( branchBuild
+              . branch (Just . StringResult)
+              . branch (const Nothing)
+              . branch (const Nothing)
+              . branch (const Nothing)
+              $ branchEnd
+          )
+          input
+
+      expectedInt =
+        dissect
+          ( branchBuild
+              . branch (const Nothing)
+              . branch (Just . IntResult)
+              . branch (const Nothing)
+              . branch (const Nothing)
+              $ branchEnd
+          )
+          input
+
+      expectedBool =
+        dissect
+          ( branchBuild
+              . branch (const Nothing)
+              . branch (const Nothing)
+              . branch (Just . BoolResult)
+              . branch (const Nothing)
+              $ branchEnd
+          )
+          input
+
+      expectedDouble =
+        dissect
+          ( branchBuild
+              . branch (const Nothing)
+              . branch (const Nothing)
+              . branch (const Nothing)
+              . branch (Just . DoubleResult)
+              $ branchEnd
+          )
+          input
+
+    fmap StringResult (matchUnion @String input) === expectedString
+    fmap IntResult (matchUnion @Int input) === expectedInt
+    fmap BoolResult (matchUnion @Bool input) === expectedBool
+    fmap DoubleResult (matchUnion @Double input) === expectedDouble
+
+prop_matchTaggedUnion :: HH.Property
+prop_matchTaggedUnion =
+  HH.property $ do
+    matchCase <- HH.forAll Gen.enumBounded
+
+    (input :: TaggedUnion ["string" @= String, "int" @= Int, "bool" @= Bool, "double" @= Double]) <-
+      case matchCase of
+        DissectString -> do
+          string <- HH.forAll $ Gen.string (Range.constant 0 10) Gen.unicodeAll
+          pure $ unifyTaggedUnion @"string" string
+        DissectInt -> do
+          int <- HH.forAll $ Gen.integral (Range.constant minBound maxBound)
+          pure $ unifyTaggedUnion @"int" int
+        DissectBool -> do
+          bool <- HH.forAll Gen.bool
+          pure $ unifyTaggedUnion @"bool" bool
+        DissectDouble -> do
+          double <- HH.forAll $ Gen.double (Range.constant 0 100)
+          pure $ unifyTaggedUnion @"double" double
+
+    let
+      expectedString =
+        dissectTaggedUnion
+          ( taggedBranchBuild
+              . taggedBranch @"string" (Just . StringResult)
+              . taggedBranch @"int" (const Nothing)
+              . taggedBranch @"bool" (const Nothing)
+              . taggedBranch @"double" (const Nothing)
+              $ taggedBranchEnd
+          )
+          input
+
+      expectedInt =
+        dissectTaggedUnion
+          ( taggedBranchBuild
+              . taggedBranch @"string" (const Nothing)
+              . taggedBranch @"int" (Just . IntResult)
+              . taggedBranch @"bool" (const Nothing)
+              . taggedBranch @"double" (const Nothing)
+              $ taggedBranchEnd
+          )
+          input
+
+      expectedBool =
+        dissectTaggedUnion
+          ( taggedBranchBuild
+              . taggedBranch @"string" (const Nothing)
+              . taggedBranch @"int" (const Nothing)
+              . taggedBranch @"bool" (Just . BoolResult)
+              . taggedBranch @"double" (const Nothing)
+              $ taggedBranchEnd
+          )
+          input
+
+      expectedDouble =
+        dissectTaggedUnion
+          ( taggedBranchBuild
+              . taggedBranch @"string" (const Nothing)
+              . taggedBranch @"int" (const Nothing)
+              . taggedBranch @"bool" (const Nothing)
+              . taggedBranch @"double" (Just . DoubleResult)
+              $ taggedBranchEnd
+          )
+          input
+
+    fmap StringResult (matchTaggedUnion @"string" input) === expectedString
+    fmap IntResult (matchTaggedUnion @"int" input) === expectedInt
+    fmap BoolResult (matchTaggedUnion @"bool" input) === expectedBool
+    fmap DoubleResult (matchTaggedUnion @"double" input) === expectedDouble

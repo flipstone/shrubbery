@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -13,6 +14,8 @@ module Shrubbery.TaggedUnion
   , TaggedBranches
   , taggedBranchBuild
   , dissectTaggedUnion
+  , matchTaggedUnion
+  , matchTaggedUnionProxy
   , TaggedBranchBuilder
   , taggedBranch
   , taggedSingleBranch
@@ -26,11 +29,12 @@ import qualified Control.DeepSeq as DeepSeq
 import Data.Proxy (Proxy (Proxy))
 import GHC.TypeLits (KnownNat, Symbol)
 
-import Shrubbery.BranchIndex (BranchIndex, indexOfTypeAt)
+import Data.Type.Equality ((:~:) (..))
+import Shrubbery.BranchIndex (BranchIndex, indexOfTypeAt, testBranchIndexEquality)
 import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch)
 import Shrubbery.Classes (EqBranches, NFDataBranches, ShowBranches, unifyWithIndex)
 import Shrubbery.TypeList (Append, KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex, type (@=))
-import Shrubbery.Union (Union, dissectUnion)
+import Shrubbery.Union (Union (Union), dissectUnion)
 
 {- |
   'TaggedUnion' provides a variation on the 'Union' concept that allows a type-level
@@ -133,6 +137,62 @@ dissectTaggedUnion ::
   result
 dissectTaggedUnion (TaggedBranches branches) (TaggedUnion union) =
   dissectUnion branches union
+
+{- |
+  Matches a 'TaggedUnion' against one of its tags, returning 'Just' the value of the
+  tag if the 'TaggedUnion' value is of that tag and type, or 'Nothing' otherwise.
+  Use with @TypeApplications@:
+
+  @
+    matchTaggedUnion @"tag" someTaggedUnion
+  @
+
+  See 'matchTaggedUnionProxy' for a version that does not require @TypeApplications@.
+-}
+matchTaggedUnion ::
+  forall (tag :: Symbol) t taggedTypes n.
+  ( TagType tag taggedTypes ~ t
+  , KnownNat n
+  , TagIndex tag taggedTypes ~ n
+  , TypeAtIndex n (TaggedTypes taggedTypes) ~ t
+  ) =>
+  TaggedUnion taggedTypes ->
+  Maybe t
+matchTaggedUnion (TaggedUnion (Union branchIndex t)) =
+  let
+    tagIndex :: Proxy n
+    tagIndex =
+      Proxy
+
+    indexOfT :: BranchIndex t (TaggedTypes taggedTypes)
+    indexOfT =
+      indexOfTypeAt tagIndex
+  in
+    case testBranchIndexEquality indexOfT branchIndex of
+      Just Refl -> Just t
+      Nothing -> Nothing
+
+{- |
+  Matches a 'TaggedUnion' against one of its tags, returning 'Just' the value of the
+  tag if the 'TaggedUnion' value is of that tag and type, or 'Nothing' otherwise, e.g.:
+
+  @
+    matchTaggedUnionProxy (Proxy :: Proxy "tag") myTaggedUnion
+  @
+
+  See 'matchTaggedUnion' for a version that uses @TypeApplications@ instead of a proxy.
+-}
+matchTaggedUnionProxy ::
+  forall (tag :: Symbol) t taggedTypes n proxy.
+  ( TagType tag taggedTypes ~ t
+  , KnownNat n
+  , TagIndex tag taggedTypes ~ n
+  , TypeAtIndex n (TaggedTypes taggedTypes) ~ t
+  ) =>
+  proxy tag ->
+  TaggedUnion taggedTypes ->
+  Maybe t
+matchTaggedUnionProxy _ = matchTaggedUnion @tag
 
 {- |
   Like 'branchBuild', this finishes the building of a tagged branch set
