@@ -97,6 +97,7 @@ dissectUnion ::
   result
 dissectUnion branches (Union branchIndex t) =
   selectBranchAtIndex branchIndex branches t
+{-# INLINE dissectUnion #-}
 
 {- |
   Matches a 'Union' against one of its types, returning 'Just' the value if the

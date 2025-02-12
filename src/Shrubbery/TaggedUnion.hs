@@ -30,7 +30,7 @@ import Data.Proxy (Proxy (Proxy))
 import GHC.TypeLits (KnownNat, Symbol)
 
 import Data.Type.Equality ((:~:) (..))
-import Shrubbery.BranchIndex (BranchIndex, indexOfTypeAt, testBranchIndexEquality)
+import Shrubbery.BranchIndex (indexOfTypeAt, testBranchIndexEquality)
 import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch)
 import Shrubbery.Classes (EqBranches, NFDataBranches, ShowBranches, unifyWithIndex)
 import Shrubbery.TypeList (Append, KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex, type (@=))
@@ -57,6 +57,7 @@ instance
   where
   showsPrec prec (TaggedUnion union) =
     showsPrec prec union
+  {-# INLINE showsPrec #-}
 
 instance
   ( TaggedTypes taggedTypes ~ types
@@ -68,6 +69,7 @@ instance
   where
   (==) (TaggedUnion left) (TaggedUnion right) =
     left == right
+  {-# INLINE (==) #-}
 
 instance
   ( TaggedTypes taggedTypes ~ types
@@ -114,17 +116,9 @@ unifyTaggedUnion ::
   ) =>
   typ ->
   TaggedUnion taggedTypes
-unifyTaggedUnion value =
-  let
-    tagIndex :: Proxy n
-    tagIndex =
-      Proxy
-
-    index :: BranchIndex typ (TaggedTypes taggedTypes)
-    index =
-      indexOfTypeAt tagIndex
-  in
-    TaggedUnion (unifyWithIndex index value)
+unifyTaggedUnion =
+  TaggedUnion . unifyWithIndex (indexOfTypeAt (Proxy :: Proxy n))
+{-# INLINE unifyTaggedUnion #-}
 
 {- |
   Selects a function from the branches based on the value contained within the
@@ -137,6 +131,7 @@ dissectTaggedUnion ::
   result
 dissectTaggedUnion (TaggedBranches branches) (TaggedUnion union) =
   dissectUnion branches union
+{-# INLINE dissectTaggedUnion #-}
 
 {- |
   Matches a 'TaggedUnion' against one of its tags, returning 'Just' the value of the
@@ -159,18 +154,10 @@ matchTaggedUnion ::
   TaggedUnion taggedTypes ->
   Maybe t
 matchTaggedUnion (TaggedUnion (Union branchIndex t)) =
-  let
-    tagIndex :: Proxy n
-    tagIndex =
-      Proxy
-
-    indexOfT :: BranchIndex t (TaggedTypes taggedTypes)
-    indexOfT =
-      indexOfTypeAt tagIndex
-  in
-    case testBranchIndexEquality indexOfT branchIndex of
-      Just Refl -> Just t
-      Nothing -> Nothing
+  case testBranchIndexEquality (indexOfTypeAt (Proxy :: Proxy n)) branchIndex of
+    Just Refl -> Just t
+    Nothing -> Nothing
+{-# INLINE matchTaggedUnion #-}
 
 {- |
   Matches a 'TaggedUnion' against one of its tags, returning 'Just' the value of the
@@ -193,6 +180,7 @@ matchTaggedUnionProxy ::
   TaggedUnion taggedTypes ->
   Maybe t
 matchTaggedUnionProxy _ = matchTaggedUnion @tag
+{-# INLINE matchTaggedUnionProxy #-}
 
 {- |
   Like 'branchBuild', this finishes the building of a tagged branch set
@@ -206,6 +194,7 @@ taggedBranchBuild ::
   TaggedBranches taggedTypes result
 taggedBranchBuild (TaggedBranchBuilder builder) =
   TaggedBranches (branchBuild builder)
+{-# INLINE taggedBranchBuild #-}
 
 {- |
   Similar to 'branch'. Specifies how to handle a given tag in a list of tagged
@@ -231,6 +220,7 @@ taggedBranch ::
   TaggedBranchBuilder ((tag @= typ) : taggedTypes) result
 taggedBranch =
   appendTaggedBranches . taggedSingleBranch
+{-# INLINE taggedBranch #-}
 
 {- |
   Similar to 'branchEnd'. Indicates that there are no more branches to specify.
@@ -241,6 +231,7 @@ taggedBranch =
 taggedBranchEnd :: TaggedBranchBuilder '[] result
 taggedBranchEnd =
   TaggedBranchBuilder branchEnd
+{-# INLINE taggedBranchEnd #-}
 
 {- |
   Similar to 'singleBranch'. Specifies how to handle a given a single case in a
@@ -254,6 +245,7 @@ taggedSingleBranch ::
   TaggedBranchBuilder '[tag @= typ] result
 taggedSingleBranch branchFunction =
   TaggedBranchBuilder (singleBranch branchFunction)
+{-# INLINE taggedSingleBranch #-}
 
 {- |
   Similar to 'appendBranches'. Appends two 'TaggedBranchBuilder's to form a new
@@ -268,6 +260,7 @@ appendTaggedBranches ::
   TaggedBranchBuilder (Append taggedTypesA taggedTypesB) result
 appendTaggedBranches (TaggedBranchBuilder branchesA) (TaggedBranchBuilder branchesB) =
   TaggedBranchBuilder (appendBranches branchesA branchesB)
+{-# INLINE appendTaggedBranches #-}
 
 {- |
   Similar to  'setBranchAtIndex'. Sets the function that should be used to
@@ -295,16 +288,8 @@ taggedBranchSet ::
   TaggedBranchBuilder taggedTypes result ->
   TaggedBranchBuilder taggedTypes result
 taggedBranchSet branchFunction (TaggedBranchBuilder builder) =
-  let
-    tagIndex :: Proxy n
-    tagIndex =
-      Proxy
-
-    index :: BranchIndex typ (TaggedTypes taggedTypes)
-    index =
-      indexOfTypeAt tagIndex
-  in
-    TaggedBranchBuilder (branchSetAtIndex index branchFunction builder)
+  TaggedBranchBuilder (branchSetAtIndex (indexOfTypeAt (Proxy :: Proxy n)) branchFunction builder)
+{-# INLINE taggedBranchSet #-}
 
 {- |
   Similar to 'branchDefault'. Initializes a branch builder that will return the
@@ -312,5 +297,6 @@ taggedBranchSet branchFunction (TaggedBranchBuilder builder) =
   branch. Usually this is used in conjuctions with 'taggedBranchSet'.
 -}
 taggedBranchDefault :: result -> TaggedBranchBuilder taggedTypes result
-taggedBranchDefault defaultValue =
-  TaggedBranchBuilder (branchDefault defaultValue)
+taggedBranchDefault =
+  TaggedBranchBuilder . branchDefault
+{-# INLINE taggedBranchDefault #-}

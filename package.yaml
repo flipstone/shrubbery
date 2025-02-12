@@ -1,5 +1,5 @@
 name:                shrubbery
-version:             0.2.2.0
+version:             0.2.2.3
 github:              "flipstone/shrubbery"
 license:             BSD3
 author:              "Flipstone Technology Partners, Inc"
@@ -62,6 +62,12 @@ library:
           - -Wno-implicit-prelude
           - -Wno-safe
           - -Wno-unsafe
+        when:
+          - condition: impl (ghc >=9.8)
+            ghc-options:
+              - -Wterm-variable-capture
+              - -Wextended-warnings
+
       else:
         ghc-options:
           - -O2

@@ -119,11 +119,11 @@ type OutOfBoundsMsg (index :: Nat) (types :: [Type]) =
 class KnownLength (types :: [k]) where
   lengthOfTypes :: proxy types -> Int
 
-instance (KnownNat length, length ~ Length types) => KnownLength types where
+instance (KnownNat suppliedLength, suppliedLength ~ Length types) => KnownLength types where
   lengthOfTypes =
     fromInteger . natVal . typesProxyToLengthProxy
 
-typesProxyToLengthProxy :: length ~ Length types => proxy types -> Proxy length
+typesProxyToLengthProxy :: suppliedLength ~ Length types => proxy types -> Proxy suppliedLength
 typesProxyToLengthProxy _ = Proxy
 
 {- |

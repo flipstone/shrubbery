@@ -191,6 +191,7 @@ indexOfTypeAt ::
   BranchIndex t types
 indexOfTypeAt =
   BranchIndex . fromInteger . natVal
+{-# INLINE indexOfTypeAt #-}
 
 {- |
   Retrieves the 'Int' representation of the branch index. It it up to the
@@ -199,6 +200,7 @@ indexOfTypeAt =
 branchIndexToInt :: BranchIndex t types -> Int
 branchIndexToInt (BranchIndex n) =
   n
+{-# INLINE branchIndexToInt #-}
 
 {- |
   Appends additional types to the end of the list of types for a branch index.
