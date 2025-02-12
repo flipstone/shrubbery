@@ -118,6 +118,7 @@ selectBranch ::
   result
 selectBranch =
   selectBranchAtIndex firstIndexOfType
+{-# INLINE selectBranch #-}
 
 {- |
   Selects the function out of 'Branches' at the given index so that it can be
@@ -142,6 +143,7 @@ selectBranchAtProxy ::
   result
 selectBranchAtProxy proxy =
   selectBranchAtIndex (indexOfTypeAt proxy)
+{-# INLINE selectBranchAtProxy #-}
 
 {- |
   Selects the function out of 'Branches' at the given index so that it can be
@@ -157,6 +159,7 @@ selectBranchAtIndex branchIndex (Branches array) =
     Arr.indexArray
       array
       (branchIndexToInt branchIndex)
+{-# INLINE selectBranchAtIndex #-}
 
 {- |
   From a lexical code perspective you can think of this as "beginning" a branching
@@ -169,14 +172,16 @@ branchBuild ::
   Branches paramTypes result
 branchBuild builder@(BranchBuilder populateBranches) =
   Branches $
-    Arr.runArray $ do
-      mutArray <-
-        Arr.newArray
-          (lengthOfTypes $ paramTypesProxy builder)
-          (error "Uninitialized Shrubbery branch handler. This is a bug in shrubbery. Please report it at https://github.com/flipstone/shrubbery/issues.")
-      branchIndexRef <- newSTRef 0
-      populateBranches branchIndexRef mutArray
-      pure mutArray
+    Arr.runArray $
+      do
+        mutArray <-
+          Arr.newArray
+            (lengthOfTypes $ paramTypesProxy builder)
+            (error "Uninitialized Shrubbery branch handler. This is a bug in shrubbery. Please report it at https://github.com/flipstone/shrubbery/issues.")
+        branchIndexRef <- newSTRef 0
+        populateBranches branchIndexRef mutArray
+        pure mutArray
+{-# INLINE branchBuild #-}
 
 {- |
   Specifies how to handle a given position in a list of types. The function
@@ -191,6 +196,7 @@ branch ::
   BranchBuilder (param : paramTypes) result
 branch =
   appendBranches . singleBranch
+{-# INLINE branch #-}
 
 {- |
   Sets the function that should be used to handle values of a particular type in
@@ -209,11 +215,8 @@ branchSet ::
   BranchBuilder paramTypes result ->
   BranchBuilder paramTypes result
 branchSet =
-  let
-    branchIndex =
-      firstIndexOfType
-  in
-    branchSetAtIndex branchIndex
+  branchSetAtIndex firstIndexOfType
+{-# INLINE branchSet #-}
 
 {- |
   Set the function that should be used to handle values at a particular index in
@@ -275,6 +278,7 @@ branchDefault defaultResult =
 -}
 branchEnd :: BranchBuilder '[] result
 branchEnd = BranchBuilder $ \_ _ -> pure ()
+{-# INLINE branchEnd #-}
 
 {- |
   Specifies how to handle a given a single case in a standalone fashion. This
@@ -288,6 +292,7 @@ singleBranch branchFunction =
     branchIndex <- readSTRef branchIndexRef
     Arr.writeArray array branchIndex (unsafeToBranch branchFunction)
     modifySTRef' branchIndexRef (+ 1)
+{-# INLINE singleBranch #-}
 
 {- |
   Appends two 'BranchBuilder's to form a new 'BranchBuilder' that has branches
@@ -298,9 +303,9 @@ appendBranches ::
   BranchBuilder paramTypesB result ->
   BranchBuilder (Append paramTypesA paramTypesB) result
 appendBranches (BranchBuilder populateA) (BranchBuilder populateB) =
-  BranchBuilder $ \branchIndexRef array -> do
-    populateA branchIndexRef array
-    populateB branchIndexRef array
+  BranchBuilder $ \branchIndexRef array ->
+    populateA branchIndexRef array *> populateB branchIndexRef array
+{-# INLINE appendBranches #-}
 
 paramTypesProxy :: BranchBuilder paramTypes result -> Proxy paramTypes
 paramTypesProxy _ =

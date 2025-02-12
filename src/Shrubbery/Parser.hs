@@ -108,10 +108,10 @@ parseOption = ConsParse
   of options however is desired.
 -}
 parse ::
-  (Unification sum, Functor f) =>
-  Parser f input (BranchTypes sum) ->
+  (Unification sumType, Functor f) =>
+  Parser f input (BranchTypes sumType) ->
   input ->
-  [f sum]
+  [f sumType]
 parse parser input =
   case parser of
     NilParse ->
@@ -126,15 +126,15 @@ parse parser input =
   union with the appropriate index and can later be differentiated.
 -}
 parseZipper ::
-  ( Unification sum
-  , BranchTypes sum ~ ZippedTypes front a back
+  ( Unification sumType
+  , BranchTypes sumType ~ ZippedTypes front a back
   , Functor f
   ) =>
   (input -> f a) ->
   Parser f input back ->
   TypeZipper front a back ->
   input ->
-  [f sum]
+  [f sumType]
 parseZipper f parseRest zipper input =
   let
     item =
