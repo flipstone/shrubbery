@@ -84,3 +84,19 @@ tests:
     dependencies:
       - shrubbery
       - hedgehog
+
+benchmarks:
+  shrubbery-bench:
+    main: Main.hs
+    source-dirs: bench
+    ghc-options:
+    - -fproc-alignment=64
+    - -freduction-depth=0
+    - -rtsopts
+    - -with-rtsopts "-T -A32m"
+    - -O2
+    - -Wall
+    - -Werror
+    dependencies:
+    - shrubbery
+    - tasty-bench

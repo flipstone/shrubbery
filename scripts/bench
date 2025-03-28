@@ -8,14 +8,9 @@ STACK_OPTIONS=""
 
 if [ "$CI" ]; then
   STACK_OPTIONS="--lock-file error-on-write"
-else
-  STACK_OPTIONS="--fast"
 fi
 
 stack \
-  build \
-  --test \
-  --bench \
-  --no-run-benchmarks \
+  bench \
   $STACK_OPTIONS \
   "$@"

@@ -66,3 +66,19 @@ test-suite shrubbery-test
     , primitive
     , shrubbery
   default-language: Haskell2010
+
+benchmark shrubbery-bench
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Bench.Union
+      Paths_shrubbery
+  hs-source-dirs:
+      bench
+  ghc-options: -fproc-alignment=64 -freduction-depth=0 -rtsopts -with-rtsopts "-T -A32m" -O2 -Wall -Werror
+  build-depends:
+      base >=4.7 && <5
+    , primitive
+    , shrubbery
+    , tasty-bench
+  default-language: Haskell2010
