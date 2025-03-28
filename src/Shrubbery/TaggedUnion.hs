@@ -32,7 +32,7 @@ import GHC.TypeLits (KnownNat, Symbol)
 import Data.Type.Equality ((:~:) (..))
 import Shrubbery.BranchIndex (indexOfTypeAt, testBranchIndexEquality)
 import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch)
-import Shrubbery.Classes (EqBranches, NFDataBranches, ShowBranches, unifyWithIndex)
+import Shrubbery.Classes (EqBranches, NFDataBranches, OrdBranches, ShowBranches, unifyWithIndex)
 import Shrubbery.TypeList (Append, KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex, type (@=))
 import Shrubbery.Union (Union (Union), dissectUnion)
 
@@ -70,6 +70,19 @@ instance
   (==) (TaggedUnion left) (TaggedUnion right) =
     left == right
   {-# INLINE (==) #-}
+
+instance
+  ( TaggedTypes taggedTypes ~ types
+  , types ~ (first : rest)
+  , EqBranches types
+  , OrdBranches types
+  , KnownLength types
+  ) =>
+  Ord (TaggedUnion taggedTypes)
+  where
+  compare (TaggedUnion left) (TaggedUnion right) =
+    compare left right
+  {-# INLINE compare #-}
 
 instance
   ( TaggedTypes taggedTypes ~ types

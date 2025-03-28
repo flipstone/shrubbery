@@ -59,11 +59,11 @@ module Shrubbery.Union
 
 import qualified Control.DeepSeq as DeepSeq
 import Data.Type.Equality ((:~:) (..))
-
 import GHC.TypeLits (KnownNat)
+
 import Shrubbery.BranchIndex (BranchIndex, firstIndexOfType, testBranchIndexEquality)
 import Shrubbery.Branches (Branches, selectBranchAtIndex)
-import Shrubbery.Classes (BranchTypes, Dissection (..), EqBranches, NFDataBranches, ShowBranches, Unification (..), eqViaDissect, rnfViaDissect, showsPrecViaDissect)
+import Shrubbery.Classes (BranchTypes, Dissection (..), EqBranches, NFDataBranches, OrdBranches, ShowBranches, Unification (..), compareViaDissect, eqViaDissect, rnfViaDissect, showsPrecViaDissect)
 import Shrubbery.TypeList (FirstIndexOf, KnownLength)
 
 {- |
@@ -79,6 +79,9 @@ instance (ShowBranches types, KnownLength types) => Show (Union types) where
 
 instance (EqBranches types, KnownLength types, types ~ (first : rest)) => Eq (Union types) where
   (==) = eqViaDissect
+
+instance (EqBranches types, OrdBranches types, KnownLength types, types ~ (first : rest)) => Ord (Union types) where
+  compare = compareViaDissect
 
 instance (NFDataBranches types, KnownLength types) => DeepSeq.NFData (Union types) where
   rnf = rnfViaDissect
