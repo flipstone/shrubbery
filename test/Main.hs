@@ -44,6 +44,10 @@ main =
           , ("Generic unification", prop_genericUnification)
           , ("matchUnion works", prop_matchUnion)
           , ("matchTaggedUnion works", prop_matchTaggedUnion)
+          , ("Union Eq instance matches derived Eq for equivalent sum type", prop_unionEqMatchesDerivedEq)
+          , ("Tagged Union Eq instance matches derived Eq for equivalent sum type", prop_taggedUnionEqMatchesDerivedEq)
+          , ("Union Ord instance matches derived Ord for equivalent sum type", prop_unionOrdMatchesDerivedOrd)
+          , ("Tagged Union Ord instance matches derived Ord for equivalent sum type", prop_taggedUnionOrdMatchesDerivedOrd)
           ]
     ]
 
@@ -672,3 +676,95 @@ prop_matchTaggedUnion =
     fmap IntResult (matchTaggedUnion @"int" input) === expectedInt
     fmap BoolResult (matchTaggedUnion @"bool" input) === expectedBool
     fmap DoubleResult (matchTaggedUnion @"double" input) === expectedDouble
+
+data OrdSum
+  = C1 ()
+  | C2 Int
+  | C3 Int
+  | C4 String
+  | C5 Double
+  deriving (Eq, Ord, Show)
+
+ordSumGen :: HH.Gen OrdSum
+ordSumGen =
+  Gen.choice
+    [ pure $ C1 ()
+    , C2 <$> Gen.integral (Range.constant minBound maxBound)
+    , C3 <$> Gen.integral (Range.constant minBound maxBound)
+    , C4 <$> Gen.string (Range.constant 0 10) Gen.unicodeAll
+    , C5 <$> Gen.double (Range.constant (-100) 100)
+    ]
+
+type OrdUnion =
+  Union
+    '[ ()
+     , Int
+     , Int
+     , String
+     , Double
+     ]
+
+ordSumToUnion :: OrdSum -> OrdUnion
+ordSumToUnion x = case x of
+  C1 a -> unifyWithIndex index0 a
+  C2 a -> unifyWithIndex index1 a
+  C3 a -> unifyWithIndex index2 a
+  C4 a -> unifyWithIndex index3 a
+  C5 a -> unifyWithIndex index4 a
+
+type OrdTaggedUnion =
+  TaggedUnion
+    '[ "C1" @= ()
+     , "C2" @= Int
+     , "C3" @= Int
+     , "C4" @= String
+     , "C5" @= Double
+     ]
+
+ordSumToTaggedUnion :: OrdSum -> OrdTaggedUnion
+ordSumToTaggedUnion x = case x of
+  C1 a -> unifyTaggedUnion @"C1" a
+  C2 a -> unifyTaggedUnion @"C2" a
+  C3 a -> unifyTaggedUnion @"C3" a
+  C4 a -> unifyTaggedUnion @"C4" a
+  C5 a -> unifyTaggedUnion @"C5" a
+
+prop_unionEqMatchesDerivedEq :: HH.Property
+prop_unionEqMatchesDerivedEq =
+  HH.property $ do
+    value1 <- HH.forAll ordSumGen
+    value2 <- HH.forAll ordSumGen
+    let
+      unionValue1 = ordSumToUnion value1
+      unionValue2 = ordSumToUnion value2
+    (value1 == value2) === (unionValue1 == unionValue2)
+
+prop_taggedUnionEqMatchesDerivedEq :: HH.Property
+prop_taggedUnionEqMatchesDerivedEq =
+  HH.property $ do
+    value1 <- HH.forAll ordSumGen
+    value2 <- HH.forAll ordSumGen
+    let
+      taggedUnionValue1 = ordSumToTaggedUnion value1
+      taggedUnionValue2 = ordSumToTaggedUnion value2
+    (value1 == value2) === (taggedUnionValue1 == taggedUnionValue2)
+
+prop_unionOrdMatchesDerivedOrd :: HH.Property
+prop_unionOrdMatchesDerivedOrd =
+  HH.property $ do
+    value1 <- HH.forAll ordSumGen
+    value2 <- HH.forAll ordSumGen
+    let
+      unionValue1 = ordSumToUnion value1
+      unionValue2 = ordSumToUnion value2
+    compare value1 value2 === compare unionValue1 unionValue2
+
+prop_taggedUnionOrdMatchesDerivedOrd :: HH.Property
+prop_taggedUnionOrdMatchesDerivedOrd =
+  HH.property $ do
+    value1 <- HH.forAll ordSumGen
+    value2 <- HH.forAll ordSumGen
+    let
+      taggedUnionValue1 = ordSumToTaggedUnion value1
+      taggedUnionValue2 = ordSumToTaggedUnion value2
+    compare value1 value2 === compare taggedUnionValue1 taggedUnionValue2

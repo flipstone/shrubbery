@@ -1,7 +1,9 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -44,16 +46,18 @@ module Shrubbery.Classes
   , showsPrecViaDissect
   , EqBranches
   , eqViaDissect
+  , OrdBranches
+  , compareViaDissect
   , NFDataBranches
   , rnfViaDissect
   ) where
 
 import qualified Control.DeepSeq as DeepSeq
-import Data.Kind (Type)
+import Data.Kind (Constraint, Type)
 import GHC.TypeLits (KnownNat)
 
-import Shrubbery.BranchIndex (BranchIndex, TypeZipper, firstIndexOfType, indexOfFocusedType, moveZipperNext, startZipper)
-import Shrubbery.Branches (BranchBuilder, Branches, branch, branchBuild, branchDefault, branchEnd, branchSetAtIndex)
+import Shrubbery.BranchIndex (BranchIndex, TypeZipper, branchIndexToInt, firstIndexOfType, indexOfFocusedType, moveZipperNext, splitIndex, startZipper)
+import Shrubbery.Branches (BranchBuilder, Branches, branch, branchBuild, branchDefault, branchDefaultWithIndex, branchEnd, branchSetAtIndex)
 import Shrubbery.TypeList (FirstIndexOf, KnownLength, ZippedTypes)
 
 {- |
@@ -137,12 +141,12 @@ showsPrecViaDissect ::
 showsPrecViaDissect prec a =
   dissect (branchBuild showsPrecBranches) a prec
 
-data EqBranchesList (allTypes :: [Type]) (someTypes :: [Type]) where
-  EqBranchesNil :: EqBranchesList allTypes '[]
-  EqBranchesCons ::
-    Eq a =>
-    EqBranchesList allTypes types ->
-    EqBranchesList allTypes (a : types)
+data BranchesList (c :: Type -> Constraint) (allTypes :: [Type]) (someTypes :: [Type]) where
+  BranchesNil :: BranchesList c allTypes '[]
+  BranchesCons ::
+    c a =>
+    BranchesList c allTypes types ->
+    BranchesList c allTypes (a : types)
 
 {- |
   'EqBranches' is provided as a convenience for implementing 'Eq' on
@@ -150,15 +154,31 @@ data EqBranchesList (allTypes :: [Type]) (someTypes :: [Type]) where
   way to make use of this.
 -}
 class EqBranches types where
-  eqBranchesList :: EqBranchesList allTypes types
+  eqBranchesList :: BranchesList Eq allTypes types
 
 instance EqBranches '[] where
   eqBranchesList =
-    EqBranchesNil
+    BranchesNil
 
 instance (Eq a, EqBranches rest) => EqBranches (a : rest) where
   eqBranchesList =
-    EqBranchesCons eqBranchesList
+    BranchesCons eqBranchesList
+
+{- |
+  'OrdBranches' is provided as a convenience for implementing 'Ord' on
+  sum types via 'Dissection'. See 'compareViaDissect' for the most common
+  way to make use of this.
+-}
+class OrdBranches types where
+  compareBranchesList :: BranchesList Ord allTypes types
+
+instance OrdBranches '[] where
+  compareBranchesList =
+    BranchesNil
+
+instance (Ord a, OrdBranches rest) => OrdBranches (a : rest) where
+  compareBranchesList =
+    BranchesCons compareBranchesList
 
 {- |
   'eqViaDissect' can be used as the implementation of '==' for an 'Eq' instance
@@ -174,8 +194,8 @@ eqViaDissect ::
   a ->
   a ->
   Bool
-eqViaDissect a =
-  dissect (dissect eqBranches a)
+eqViaDissect x =
+  dissect (dissect eqBranches x)
 
 eqBranches ::
   ( EqBranches types
@@ -190,25 +210,124 @@ eqBranches =
       , allTypes ~ ZippedTypes front focus rest
       ) =>
       TypeZipper front focus rest ->
-      EqBranchesList allTypes (focus : rest) ->
+      BranchesList Eq allTypes (focus : rest) ->
       BranchBuilder (focus : rest) (Branches allTypes Bool)
     go zipper eb =
       case eb of
-        EqBranchesCons eqBranchesRest ->
+        BranchesCons eqBranchesRest ->
           let
             index =
               indexOfFocusedType zipper
 
             branchesRest =
               case eqBranchesRest of
-                EqBranchesNil -> branchEnd
-                EqBranchesCons _ -> go (moveZipperNext zipper) eqBranchesRest
+                BranchesNil -> branchEnd
+                BranchesCons _ -> go (moveZipperNext zipper) eqBranchesRest
           in
             branch
               (\a -> branchBuild . branchSetAtIndex index (a ==) $ branchDefault False)
               branchesRest
   in
     branchBuild $ go startZipper eqBranchesList
+
+{- |
+  'compareViaDissect' can be used as the implementation of '==' for an 'Ord' instance
+  for types that implement 'Dissection' when all the  member types implement 'Ord'
+-}
+compareViaDissect ::
+  ( Dissection a
+  , types ~ BranchTypes a
+  , OrdBranches types
+  , KnownLength types
+  , types ~ (first : rest)
+  ) =>
+  a ->
+  a ->
+  Ordering
+compareViaDissect x =
+  dissect (dissect compareBranches x)
+
+compareBranches ::
+  forall types first rest.
+  ( OrdBranches types
+  , KnownLength types
+  , types ~ (first : rest)
+  ) =>
+  Branches types (Branches types Ordering)
+compareBranches =
+  let
+    go ::
+      forall front focus rest'.
+      ( KnownLength types
+      , types ~ ZippedTypes front focus rest'
+      ) =>
+      TypeZipper front focus rest' ->
+      BranchesList Ord types (focus : rest') ->
+      BranchBuilder (focus : rest') (Branches types Ordering)
+    go zipper eb =
+      case eb of
+        BranchesCons compareBranchesRest ->
+          let
+            index =
+              indexOfFocusedType zipper
+
+            indexInt =
+              branchIndexToInt index
+
+            branchesRest =
+              case compareBranchesRest of
+                BranchesNil -> branchEnd
+                BranchesCons _ -> go (moveZipperNext zipper) compareBranchesRest
+
+            defaultComparison =
+              branchDefaultWithIndex (indexInt `compare`)
+          in
+            branch
+              (\a -> branchBuild $ branchSetAtIndex index (a `compare`) defaultComparison)
+              branchesRest
+  in
+    branchBuild $ go startZipper compareBranchesList
+
+compareBranches' ::
+  forall types first rest.
+  ( OrdBranches types
+  , KnownLength types
+  , types ~ (first : rest)
+  ) =>
+  Branches types (Branches types Ordering)
+compareBranches' =
+  let
+    go ::
+      forall front focus rest'.
+      ( KnownLength types
+      , types ~ ZippedTypes front focus rest'
+      ) =>
+      TypeZipper front focus rest' ->
+      BranchesList Ord types (focus : rest') ->
+      BranchBuilder (focus : rest') (Branches types Ordering)
+    go zipper eb =
+      case eb of
+        BranchesCons compareBranchesRest ->
+          let
+            index =
+              indexOfFocusedType zipper
+
+            indexInt =
+              branchIndexToInt index
+
+            branchesRest =
+              case compareBranchesRest of
+                BranchesNil -> branchEnd
+                BranchesCons _ -> go (moveZipperNext zipper) compareBranchesRest
+
+            defaultComparison =
+              branchDefaultWithIndex (indexInt `compare`)
+          in
+            branch
+              (\a -> branchBuild $ branchSetAtIndex index (a `compare`) defaultComparison)
+              branchesRest
+  in
+    branchBuild $ go startZipper compareBranchesList
 
 {- |
   'rnfViaDissect' can be used as the implementation of 'DeepSeq.rnf' in the

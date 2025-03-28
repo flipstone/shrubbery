@@ -70,6 +70,7 @@ module Shrubbery.Branches
   , branchSet
   , branchSetAtIndex
   , branchDefault
+  , branchDefaultWithIndex
   , Branches
   , BranchBuilder
   , selectBranch
@@ -254,21 +255,33 @@ branchDefault ::
   result ->
   BranchBuilder paramTypes result
 branchDefault defaultResult =
+  branchDefaultWithIndex (const defaultResult)
+
+{- |
+  Similar to 'branchDefault', but allows the caller to use the index of the
+  branch to compute the default result. The index passed to the function is
+  equivalent to the index that would be obtained by calling 'branchIndexToInt'
+  on the 'BranchIndex' for a given type in @paramTypes@.
+-}
+branchDefaultWithIndex ::
+  (Int -> result) ->
+  BranchBuilder paramTypes result
+branchDefaultWithIndex mkDefaultResult =
   BranchBuilder $ \branchIndexRef array -> do
     let
       size =
         Arr.sizeofMutableArray array
 
-      defaultEntry =
-        const defaultResult
+      defaultEntry i =
+        const $ mkDefaultResult i
 
       setDefaultAt arrayIndex =
-        Arr.writeArray array arrayIndex (unsafeToBranch defaultEntry)
+        Arr.writeArray array arrayIndex (unsafeToBranch $ defaultEntry arrayIndex)
 
     defaultStartIndex <- readSTRef branchIndexRef
 
     -- Note: writeArray does NOT do bounds checks, so it's quite important that
-    -- we get the bounds correct here and don't overrune the array
+    -- we get the bounds correct here and don't overrun the array
     mapM_ setDefaultAt [defaultStartIndex .. (size - 1)]
 
 {- |
