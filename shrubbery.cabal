@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           shrubbery
-version:        0.2.2.1
+version:        0.2.3.0
 description:    Please see the README on GitHub at <https://github.com/flipstone/shrubbery#readme>
 homepage:       https://github.com/flipstone/shrubbery#readme
 bug-reports:    https://github.com/flipstone/shrubbery/issues
