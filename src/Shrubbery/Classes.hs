@@ -192,8 +192,8 @@ eqViaDissect ::
   a ->
   a ->
   Bool
-eqViaDissect x =
-  dissect (dissect eqBranches x)
+eqViaDissect =
+  dissect . dissect eqBranches
 
 eqBranches ::
   ( EqBranches types
@@ -242,8 +242,8 @@ compareViaDissect ::
   a ->
   a ->
   Ordering
-compareViaDissect x =
-  dissect (dissect compareBranches x)
+compareViaDissect =
+  dissect . dissect compareBranches
 
 compareBranches ::
   ( OrdBranches types
