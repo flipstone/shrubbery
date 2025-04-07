@@ -74,7 +74,7 @@ prop_fourWayBranchingOnType =
 
     indexResult :: Show a => Int -> a -> String
     indexResult n a =
-      "Index " ++ show n ++ ": " ++ show a
+      "Index " <> show n <> ": " <> show a
   in
     HH.property $ do
       input <- HH.forAll inputGen
@@ -111,7 +111,7 @@ prop_fourWayBranchingOnIndex =
 
     indexResult :: Show a => Int -> a -> String
     indexResult n a =
-      "Index " ++ show n ++ ": " ++ show a
+      "Index " <> show n <> ": " <> show a
   in
     HH.property $ do
       input <- HH.forAll inputGen
@@ -238,7 +238,7 @@ prop_fourWayUnionDissection =
 
     indexResult :: Show a => Int -> a -> String
     indexResult n a =
-      "Index " ++ show n ++ ": " ++ show a
+      "Index " <> show n <> ": " <> show a
   in
     HH.property $ do
       dissectionCase <- HH.forAll Gen.enumBounded
@@ -346,7 +346,7 @@ prop_fourWayTaggedUnionDissection =
 
     indexResult :: Show a => Int -> a -> String
     indexResult n a =
-      "Index " ++ show n ++ ": " ++ show a
+      "Index " <> show n <> ": " <> show a
   in
     HH.property $ do
       dissectionCase <- HH.forAll Gen.enumBounded
@@ -441,10 +441,11 @@ prop_parserRunsAllOptions =
   let
     parser :: Parser Maybe String [Int, Bool, String]
     parser =
-      parseOption @Int readMaybe $
-        parseOption @Bool readMaybe $
-          parseOption @String Just $
-            parseEnd
+      parseOption @Int readMaybe
+        . parseOption @Bool readMaybe
+        $ parseOption @String
+          Just
+          parseEnd
 
     mkExpected :: String -> [Maybe (Union [Int, Bool, String])]
     mkExpected input =

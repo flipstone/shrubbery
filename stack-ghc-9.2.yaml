@@ -1,6 +1,5 @@
-resolver: lts-22.39
-system-ghc: true
-install-ghc: false
+---
+resolver: lts-20.26
 packages:
   - .
 allow-different-user: true

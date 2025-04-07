@@ -1,9 +1,14 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+
+#if __GLASGOW_HASKELL__ <= 902
+{-# LANGUAGE ConstraintKinds #-}
+#endif
 
 {- |
   This module provides typeclasses for constructing and deconstructing

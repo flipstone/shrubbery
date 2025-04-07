@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
-set -e
+set -o errexit
 
-if $(docker volume inspect flipstone_stack_root >/dev/null 2>/dev/null); then
+if docker volume inspect flipstone_stack_root >/dev/null 2>/dev/null; then
   echo "Skipping creation of flipstone_stack_root docker volume. It already exists"
 else
   echo "Creating flipstone_stack_root docker network"
@@ -18,4 +18,3 @@ fi
 if [ "$EXIT_FAILURE" != "" ]; then
   exit 1
 fi
-

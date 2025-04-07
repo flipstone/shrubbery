@@ -1,6 +1,8 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -90,10 +92,11 @@ type family Append (front :: [k]) (back :: [k]) :: [k] where
   This is the default error message used by 'FirstIndexOf' when the type is
   not found.
 -}
+type NotAMemberMsg :: forall t. t -> [Type] -> ErrorMessage
 type NotAMemberMsg t (types :: [Type]) =
-  ( 'ShowType t
-      ':<>: 'Text " is not a member of "
-      ':<>: 'ShowType types
+  ( ShowType t
+      :<>: Text " is not a member of "
+      :<>: ShowType types
   )
 
 {- |
@@ -101,12 +104,12 @@ type NotAMemberMsg t (types :: [Type]) =
   out of bounds.
 -}
 type OutOfBoundsMsg (index :: Nat) (types :: [Type]) =
-  ( 'Text "Index "
-      ':<>: 'ShowType index
-      ':<>: 'Text " is out of bounds for the type list of length "
-      ':<>: 'ShowType (Length types)
-      ':<>: 'Text ": "
-      ':<>: 'ShowType types
+  ( Text "Index "
+      :<>: ShowType index
+      :<>: Text " is out of bounds for the type list of length "
+      :<>: ShowType (Length types)
+      :<>: Text ": "
+      :<>: ShowType types
   )
 
 {- |
@@ -166,8 +169,9 @@ type family TaggedTypes (tags :: [Tag]) :: [Type] where
   This is the default error message used by 'FirstIndexOf' when the type is
   not found.
 -}
+type NotAMemberTagMsg :: forall t. t -> [Tag] -> ErrorMessage
 type NotAMemberTagMsg t (tags :: [Tag]) =
-  ( 'ShowType t
-      ':<>: 'Text " is not one of the tag symbols in "
-      ':<>: 'ShowType tags
+  ( ShowType t
+      :<>: Text " is not one of the tag symbols in "
+      :<>: ShowType tags
   )

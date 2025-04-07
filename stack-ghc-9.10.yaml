@@ -1,6 +1,5 @@
-resolver: lts-22.39
-system-ghc: true
-install-ghc: false
+---
+resolver: nightly-2025-01-01
 packages:
   - .
 allow-different-user: true

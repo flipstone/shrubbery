@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
-set -e
+set -o errexit
 
-source scripts/lib/run-in-container.sh
+. scripts/lib/run-in-container.sh
 
 if [ "$CI" ]; then
   MODE=check
@@ -10,4 +10,4 @@ else
   MODE=inplace
 fi
 
-git ls-files -z '*.hs' | xargs -0 fourmolu --mode $MODE
+find . -type f | grep -v -e ".stack-work" -e dist-new | grep ".hs" | xargs fourmolu --mode "$MODE"

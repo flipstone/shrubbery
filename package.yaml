@@ -4,7 +4,7 @@ github:              "flipstone/shrubbery"
 license:             BSD3
 author:              "Flipstone Technology Partners, Inc"
 maintainer:          "development@flipstone.com"
-copyright:           "2021 Flipstone Technology Partners, Inc"
+copyright:           "2021-2025 Flipstone Technology Partners, Inc"
 
 extra-source-files:
   - README.md
@@ -17,6 +17,8 @@ extra-source-files:
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
 description:         Please see the README on GitHub at <https://github.com/flipstone/shrubbery#readme>
+tested-with:
+    GHC == 8.10.7, GHC == 9.0.2, GHC == 9.2.8, GHC == 9.4.8, GHC == 9.6.6, GHC == 9.8.4, GHC == 9.10.1, GHC == 9.12.2
 
 flags:
   ci:
@@ -24,14 +26,13 @@ flags:
     manual: true
     default: false
 
-dependencies:
-  - base >= 4.7 && < 5
-  - primitive
-
 library:
   source-dirs: src
+  language: Haskell2010
   dependencies:
+    - base >= 4.13 && < 5
     - deepseq >= 1.4 && <= 1.6
+    - primitive >= 0.7.3.0 && < 0.10
   exposed-modules:
     - Shrubbery
     - Shrubbery.Classes
@@ -51,36 +52,99 @@ library:
           - -Werror
           - -Wcompat
           - -Widentities
-          - -Wincomplete-uni-patterns
-          - -Wincomplete-patterns
-          - -Wincomplete-record-updates
           - -Wmissing-local-signatures
           - -Wmissing-export-lists
-          - -Wnoncanonical-monad-instances
           - -Wpartial-fields
           - -Wmissed-specialisations
           - -Wno-implicit-prelude
           - -Wno-safe
           - -Wno-unsafe
+        when:
+          - condition: impl (ghc >= 9.0)
+            ghc-options:
+              - -Winvalid-haddock
+          - condition: impl (ghc <= 9.3)
+            #Previously the guidance was to always used ticked constructors for type constructors,
+            #but that guidance has been reversed, so we turn the warning off in older compilers.
+            ghc-options:
+              - -Wno-unticked-promoted-constructors
+
+          - condition: impl (ghc >= 9.4)
+            ghc-options:
+              - -Wimplicit-lift
+              - -Woperator-whitespace
+              - -Wredundant-bang-patterns
+              - -Wredundant-strictness-flags
+
+          - condition: impl (ghc >= 9.8)
+            ghc-options:
+              - -Wincomplete-export-warnings
+              - -Wmissing-poly-kind-signatures
+              - -Wterm-variable-capture
+          - condition: impl (ghc >= 9.10)
+            ghc-options:
+              - -Wdefaulted-exception-context
 
       else:
         ghc-options:
           - -O2
-          - -Wall
-          - -fwarn-incomplete-uni-patterns
-          - -fwarn-incomplete-record-updates
 
 tests:
   shrubbery-test:
     main: Main.hs
     source-dirs: test
-    ghc-options:
-      - -threaded
-      - -rtsopts
-      - -with-rtsopts=-N
-      - -Wall
-      - -Werror
-      - -O2
+    when:
+      - condition: flag(ci)
+        then:
+          ghc-options:
+            - -O2
+            - -Wall
+            - -Werror
+            - -Wcompat
+            - -Widentities
+            - -Wmissing-local-signatures
+            - -Wmissing-export-lists
+            - -Wpartial-fields
+            - -Wmissed-specialisations
+            - -Wno-implicit-prelude
+            - -Wno-safe
+            - -Wno-unsafe
+          when:
+            - condition: impl (ghc >= 9.0)
+              ghc-options:
+                - -Winvalid-haddock
+            - condition: impl (ghc <= 9.3)
+              #Previously the guidance was to always used ticked constructors for type constructors,
+              #but that guidance has been reversed, so we turn the warning off in older compilers.
+              ghc-options:
+                - -Wno-unticked-promoted-constructors
+
+            - condition: impl (ghc >= 9.4)
+              ghc-options:
+                - -Wimplicit-lift
+                - -Woperator-whitespace
+                - -Wredundant-bang-patterns
+                - -Wredundant-strictness-flags
+
+            - condition: impl (ghc >= 9.8)
+              ghc-options:
+                - -Wincomplete-export-warnings
+                - -Wmissing-poly-kind-signatures
+                - -Wterm-variable-capture
+            - condition: impl (ghc >= 9.10)
+              ghc-options:
+                - -Wdefaulted-exception-context
+
+        else:
+          ghc-options:
+            - -threaded
+            - -rtsopts
+            - -with-rtsopts=-N
+            - -Wall
+            - -O2
+
     dependencies:
+      - base >= 4.14 && < 5
+      - primitive >= 0.7.3.0 && < 0.10
       - shrubbery
       - hedgehog
