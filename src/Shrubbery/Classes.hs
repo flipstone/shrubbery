@@ -1,8 +1,8 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -11,34 +11,37 @@
 #endif
 
 {- |
-  This module provides typeclasses for constructing and deconstructing
-  types that have branches in them. This is to say, sum types or any type
-  that can present a sum-type-like interface.
+Copyright : Flipstone Technology Partners 2021-2025
+License   : BSD3
 
-  See 'Shrubbery.Union' for examples using the provided 'Shrubbery.Union.Union'
-  type. Intances of these classes can also be provided for regular Haskell
-  sum types to allow them to be used with the programmable branching provided
-  by 'Shrubbery.Branches', like so:
+This module provides typeclasses for constructing and deconstructing types that have branches in
+them. This is to say, sum types or any type that can present a sum-type-like interface.
 
-  @
-    data MySum = AnInt Int | AString String
+See 'Shrubbery.Union' for examples using the provided 'Shrubbery.Union.Union' type. Intances of
+these classes can also be provided for regular Haskell sum types to allow them to be used with the
+programmable branching provided by 'Shrubbery.Branches', like so:
 
-    type instance BranchTypes MySum = [Int, String]
+@
+  data MySum = AnInt Int | AString String
 
-    instance Dissection MySum where
-      dissect branches sum =
-        case sum of
-          AnInt int -> selectBranch branches int
-          AString string -> selectBranch branches string
+  type instance BranchTypes MySum = [Int, String]
 
-    instance Unification MySum where
-      unifyWithIndex idx =
-        selectBranchAtIndex idx
-          $ branchBuild
-          $ branch AnInt
-          $ branch AString
-          $ branchEnd
-  @
+  instance Dissection MySum where
+    dissect branches sum =
+      case sum of
+        AnInt int -> selectBranch branches int
+        AString string -> selectBranch branches string
+
+  instance Unification MySum where
+    unifyWithIndex idx =
+      selectBranchAtIndex idx
+        $ branchBuild
+        $ branch AnInt
+        $ branch AString
+        $ branchEnd
+@
+
+@since 0.1.0.0
 -}
 module Shrubbery.Classes
   ( BranchTypes
@@ -63,43 +66,47 @@ import Shrubbery.BranchIndex (BranchIndex, TypeZipper, branchIndexToInt, firstIn
 import Shrubbery.Branches (BranchBuilder, Branches, branch, branchBuild, branchDefault, branchDefaultWithIndex, branchEnd, branchSetAtIndex)
 import Shrubbery.TypeList (FirstIndexOf, KnownLength, ZippedTypes)
 
-{- |
-  This type family is used by both 'Dissection' and 'Unification' to specify
+{- | This type family is used by both 'Dissection' and 'Unification' to specify
   the types of the values available in the branching type. If you provided
   instances of 'Dissection' or 'Unification', you'll need to provide an
   instance of this type family as well.
+
+@since 0.1.0.0
 -}
 type family BranchTypes a :: [Type]
 
-{- |
-  A 'Dissection' provides a way to "dissect" a sum type via case analysis. The
-  branches for handling the cases are given via a 'Branches' value.
+{- | A 'Dissection' provides a way to "dissect" a sum type via case analysis. The branches for
+  handling the cases are given via a 'Branches' value.
+
+@since 0.1.0.0
 -}
 class Dissection a where
-  -- |
-  --    Implementations of this must call the appropriate function in the given
-  --    branches depending on the construction of the value @a@. If 'BranchTypes a'
-  --    contains duplicate types, the implmentation should be careful to call the
-  --    correct one in each case.
+  -- | Implementations of this must call the appropriate function in the given branches depending on
+  --    the construction of the value @a@. If 'BranchTypes a' contains duplicate types, the
+  --    implmentation should be careful to call the correct one in each case.
+  --
+  -- @since 0.1.0.0
   dissect :: Branches (BranchTypes a) result -> a -> result
 
-{- |
-  A 'Unification' provides a means to construct a sum type by embedding the
-  members of the sum.
+{- | A 'Unification' provides a means to construct a sum type by embedding the members of the sum.
+
+@since 0.1.0.0
 -}
 class Unification a where
-  -- |
-  --    Embeds a member of the sum in the sum by specifying its index. This
-  --    index-based interface is required by implementors to ensure there is not
-  --    ambiguity when 'BranchTypes a' contains duplicates.
+  -- | Embeds a member of the sum in the sum by specifying its index. This index-based interface is
+  --    required by implementors to ensure there is not ambiguity when 'BranchTypes a' contains
+  --    duplicates.
+  --
+  -- @since 0.1.0.0
   unifyWithIndex :: BranchIndex t (BranchTypes a) -> t -> a
 
-{- |
-  Constructs a sum type by embedding a member type within it.
+{- | Constructs a sum type by embedding a member type within it.
 
-  This function always embeds the member based on the first time it is found
-  in 'BranchTypes a'. If there are duplicate types in 'BranchTypes a', you
-  should use 'unifyWithIndex' to disambiguate them.
+  This function always embeds the member based on the first time it is found in 'BranchTypes a'. If
+  there are duplicate types in 'BranchTypes a', you should use 'unifyWithIndex' to disambiguate
+  them.
+
+@since 0.1.0.0
 -}
 unify ::
   forall t a branchIndex.
@@ -112,26 +119,34 @@ unify ::
 unify =
   unifyWithIndex firstIndexOfType
 
-{- |
-  'ShowBranches' is provided as a convenience for implementing 'Show' on
-  sum types via 'Dissection'. See 'showsPrecViaDissect' for the most common
-  way to make use of this.
+{- | 'ShowBranches' is provided as a convenience for implementing 'Show' on sum types via
+  'Dissection'. See 'showsPrecViaDissect' for the most common way to make use of this.
+
+@since 0.1.0.0
 -}
 class ShowBranches types where
   showsPrecBranches :: BranchBuilder types (Int -> ShowS)
 
+{- |
+
+@since 0.1.0.0
+-}
 instance ShowBranches '[] where
   showsPrecBranches =
     branchEnd
 
+{- |
+
+@since 0.1.0.0
+-}
 instance (Show a, ShowBranches rest) => ShowBranches (a : rest) where
   showsPrecBranches =
     branch (flip showsPrec) showsPrecBranches
 
-{- |
-  'showsPrecViaDissect' can be used as the implementation of 'showsPrec' in the
-  'Show' class for types that implement 'Dissection' when all the member types
-  implement 'Show'
+{- | 'showsPrecViaDissect' can be used as the implementation of 'showsPrec' in the 'Show' class for
+  types that implement 'Dissection' when all the member types implement 'Show'
+
+@since 0.1.0.0
 -}
 showsPrecViaDissect ::
   ( Dissection a
@@ -151,41 +166,60 @@ data BranchesList (c :: Type -> Constraint) (allTypes :: [Type]) (someTypes :: [
     BranchesList c allTypes types ->
     BranchesList c allTypes (a : types)
 
-{- |
-  'EqBranches' is provided as a convenience for implementing 'Eq' on
+{- | 'EqBranches' is provided as a convenience for implementing 'Eq' on
   sum types via 'Dissection'. See 'eqViaDissect' for the most common
   way to make use of this.
+
+@since 0.2.0.0
 -}
 class EqBranches types where
   eqBranchesList :: BranchesList Eq allTypes types
 
+{- |
+
+@since 0.2.0.0
+-}
 instance EqBranches '[] where
   eqBranchesList =
     BranchesNil
 
+{- |
+
+@since 0.2.0.0
+-}
 instance (Eq a, EqBranches rest) => EqBranches (a : rest) where
   eqBranchesList =
     BranchesCons eqBranchesList
 
-{- |
-  'OrdBranches' is provided as a convenience for implementing 'Ord' on
+{- | 'OrdBranches' is provided as a convenience for implementing 'Ord' on
   sum types via 'Dissection'. See 'compareViaDissect' for the most common
   way to make use of this.
+
+@since 0.2.3.0
 -}
 class OrdBranches types where
   compareBranchesList :: BranchesList Ord allTypes types
 
+{- |
+
+@since 0.2.3.0
+-}
 instance OrdBranches '[] where
   compareBranchesList =
     BranchesNil
 
+{- |
+
+@since 0.2.3.0
+-}
 instance (Ord a, OrdBranches rest) => OrdBranches (a : rest) where
   compareBranchesList =
     BranchesCons compareBranchesList
 
-{- |
-  'eqViaDissect' can be used as the implementation of '==' for an 'Eq' instance
+{- | 'eqViaDissect' can be used as the implementation of '==' for an 'Eq' instance
   for types that implement 'Dissection' when all the  member types implement 'Eq'
+
+@since 0.2.0.0
 -}
 eqViaDissect ::
   ( Dissection a
@@ -233,9 +267,10 @@ eqBranches =
   in
     branchBuild $ go startZipper eqBranchesList
 
-{- |
-  'compareViaDissect' can be used as the implementation of '==' for an 'Ord' instance
-  for types that implement 'Dissection' when all the  member types implement 'Ord'
+{- | 'compareViaDissect' can be used as the implementation of '==' for an 'Ord' instance for types
+  that implement 'Dissection' when all the member types implement 'Ord'
+
+@since 0.2.3.0
 -}
 compareViaDissect ::
   ( Dissection a
@@ -289,10 +324,10 @@ compareBranches =
   in
     branchBuild $ go startZipper compareBranchesList
 
-{- |
-  'rnfViaDissect' can be used as the implementation of 'DeepSeq.rnf' in the
-  'DeepSeq.NFData' class for types that implement 'Dissection' when all the member types
-  implement 'DeepSeq.NFData'
+{- | 'rnfViaDissect' can be used as the implementation of 'DeepSeq.rnf' in the 'DeepSeq.NFData' class
+  for types that implement 'Dissection' when all the member types implement 'DeepSeq.NFData'
+
+@since 0.2.1.0
 -}
 rnfViaDissect ::
   ( Dissection a

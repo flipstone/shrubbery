@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.37.0.
+-- This file has been generated from package.yaml by hpack version 0.38.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -50,13 +50,19 @@ library
     , primitive >=0.7.3.0 && <0.10
   default-language: Haskell2010
   if flag(ci)
-    ghc-options: -O2 -Wall -Werror -Wcompat -Widentities -Wmissing-local-signatures -Wmissing-export-lists -Wpartial-fields -Wmissed-specialisations -Wno-implicit-prelude -Wno-safe -Wno-unsafe
+    ghc-options: -O2 -Wall -Werror -Wcompat -Widentities -Wmissing-local-signatures -Wmissing-export-lists -Wpartial-fields -Wmissed-specialisations -Wunused-packages -Wno-implicit-prelude -Wno-safe -Wno-unsafe
     if impl (ghc >= 9.0)
       ghc-options: -Winvalid-haddock
     if impl (ghc <= 9.3)
       ghc-options: -Wno-unticked-promoted-constructors
+    if impl (ghc >= 9.0)
+      ghc-options: -Winvalid-haddock
     if impl (ghc >= 9.4)
       ghc-options: -Wimplicit-lift -Woperator-whitespace -Wredundant-bang-patterns -Wredundant-strictness-flags
+    if impl (ghc >= 9.6)
+      ghc-options: -fplugin Henforcer
+      build-depends:
+          henforcer
     if impl (ghc >= 9.8)
       ghc-options: -Wincomplete-export-warnings -Wmissing-poly-kind-signatures -Wterm-variable-capture
     if impl (ghc >= 9.10)

@@ -56,6 +56,7 @@ library:
           - -Wmissing-export-lists
           - -Wpartial-fields
           - -Wmissed-specialisations
+          - -Wunused-packages
           - -Wno-implicit-prelude
           - -Wno-safe
           - -Wno-unsafe
@@ -69,13 +70,20 @@ library:
             ghc-options:
               - -Wno-unticked-promoted-constructors
 
+          - condition: impl (ghc >= 9.0)
+            ghc-options:
+              - -Winvalid-haddock
           - condition: impl (ghc >= 9.4)
             ghc-options:
               - -Wimplicit-lift
               - -Woperator-whitespace
               - -Wredundant-bang-patterns
               - -Wredundant-strictness-flags
-
+          - condition: impl (ghc >= 9.6)
+            dependencies:
+              - henforcer
+            ghc-options:
+              - -fplugin Henforcer
           - condition: impl (ghc >= 9.8)
             ghc-options:
               - -Wincomplete-export-warnings

@@ -1,0 +1,18 @@
+[forAnyModule]
+allowedOpenUnaliasedImports = 1
+maximumExportsPlusHeaderUndocumented = 1
+minimumExportsPlusHeaderDocumented = 0
+maximumExportsWithoutSince = 1
+minimumExportsWithSince = 0
+moduleHeaderCopyrightMustExistNonEmpty = false
+moduleHeaderDescriptionMustExistNonEmpty = false
+moduleHeaderLicenseMustExistNonEmpty = false
+moduleHeaderMaintainerMustExistNonEmpty = false
+[[forPatternModules]]
+pattern = "Paths_*"
+[forPatternModules.rulesToIgnore]
+all = true
+[[forSpecifiedModules]]
+module = "Shrubbery.TypeList"
+maximumExportsPlusHeaderUndocumented = 7
+maximumExportsWithoutSince = 7

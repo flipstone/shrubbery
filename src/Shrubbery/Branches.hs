@@ -4,62 +4,65 @@
 {-# LANGUAGE TypeOperators #-}
 
 {- |
-  This modules provides functionality similar to Haskell's built-in case
-  statements, but which can be built at run time without losing exhaustivity
-  checking. The technique to satisfy both these desires is to use a type-level
-  list of types to represent the type of value that is available in a given
-  branch, which is analogous to the values you would extract while pattern
-  matching a Haskell type with multiple constructors in a case statement.
+Copyright : Flipstone Technology Partners 2021-2025
+License   : BSD3
 
-  This is best understood through an example:
+This modules provides functionality similar to Haskell's built-in case statements, but which can be
+built at run time without losing exhaustivity checking. The technique to satisfy both these desires
+is to use a type-level list of types to represent the type of value that is available in a given
+branch, which is analogous to the values you would extract while pattern matching a Haskell type
+with multiple constructors in a case statement.
 
-  @
-    intStringOrBoolBranches :: Branches [Int, String, Bool] String
-    intStringOrBoolBranches =
-      branchBuild
-      . branch doSomethingWithInt
-      . branch doSomethingWithString
-      . branch doSomethingWithBool
-      $ branchEnd
-  @
+This is best understood through an example:
 
-  Or, if you prefer to use @TypeApplications@ to make this more explicit:
+@
+  intStringOrBoolBranches :: Branches [Int, String, Bool] String
+  intStringOrBoolBranches =
+    branchBuild
+    . branch doSomethingWithInt
+    . branch doSomethingWithString
+    . branch doSomethingWithBool
+    $ branchEnd
+@
 
-  @
-    intStringOrBoolBranches :: Branches [Int, String, Bool] String
-    intStringOrBoolBranches =
-      branchBuild
-      . branch @Int    doSomethingWithInt
-      . branch @String doSomethingWithString
-      . branch @Bool   doSomethingWithBool
-      $ branchEnd
-  @
+Or, if you prefer to use @TypeApplications@ to make this more explicit:
 
-  You can also provide a default value and set specific branches. To do this
-  you must user either @TypeApplications@ (via 'branchSet') or explicit branch
-  indexes (via 'branchSetAtIndex'):
+@
+  intStringOrBoolBranches :: Branches [Int, String, Bool] String
+  intStringOrBoolBranches =
+    branchBuild
+    . branch @Int    doSomethingWithInt
+    . branch @String doSomethingWithString
+    . branch @Bool   doSomethingWithBool
+    $ branchEnd
+@
 
-  @
-    intStringOrBoolBranches :: Branches [Int, String, Bool] String
-    intStringOrBoolBranches =
-      branchBuild
-      . branchSet @String doSomethingWithString
-      $ branchDefault "default"
-  @
+You can also provide a default value and set specific branches. To do this you must user either
+@TypeApplications@ (via 'branchSet') or explicit branch indexes (via 'branchSetAtIndex'):
 
-  You can then use the branch values above almost like functions to perform
-  case-like analysis based on the type of value, using 'selectBranch'
+@
+  intStringOrBoolBranches :: Branches [Int, String, Bool] String
+  intStringOrBoolBranches =
+    branchBuild
+    . branchSet @String doSomethingWithString
+    $ branchDefault "default"
+@
 
-  @
-    >>> selectBranch intStringOrBoolBranches (1 :: Int)
-    doSomethingWithInt 1
+You can then use the branch values above almost like functions to perform case-like analysis based
+on the type of value, using 'selectBranch'
 
-    >>> selectBranch intStringOrBoolBranches (\"Foo\")
-    doSomethingWithString \"Foo\"
+@
+  >>> selectBranch intStringOrBoolBranches (1 :: Int)
+  doSomethingWithInt 1
 
-    >>> selectBranch intStringOrBoolBranches True
-    doSomethingWithBool True
-  @
+  >>> selectBranch intStringOrBoolBranches (\"Foo\")
+  doSomethingWithString \"Foo\"
+
+  >>> selectBranch intStringOrBoolBranches True
+  doSomethingWithBool True
+@
+
+@since 0.1.0.0
 -}
 module Shrubbery.Branches
   ( branchBuild
@@ -90,27 +93,30 @@ import Unsafe.Coerce (unsafeCoerce)
 import Shrubbery.BranchIndex (BranchIndex, branchIndexToInt, firstIndexOfType, indexOfTypeAt)
 import Shrubbery.TypeList (Append, FirstIndexOf, KnownLength (lengthOfTypes), TypeAtIndex)
 
-{- |
-  'Branches' contains an array of functions that have different parameter
+{- | 'Branches' contains an array of functions that have different parameter
   types, but produce the same result. The @paramTypes@ list of types indicates
   the types of the input parameters, in order.
+
+@since 0.1.0.0
 -}
 newtype Branches (paramTypes :: [Type]) result
   = Branches (Arr.Array (Any -> result))
 
-{- |
-  'BranchBuilder' is an efficient interface for building a 'Branches'.
-  Use 'branchBuild' to "execute" the 'BranchBuilder' to make 'Branches'.
+{- | 'BranchBuilder' is an efficient interface for building a 'Branches'.  Use 'branchBuild' to
+  "execute" the 'BranchBuilder' to make 'Branches'.
+
+@since 0.1.0.0
 -}
 newtype BranchBuilder (paramTypes :: [Type]) result
   = BranchBuilder (forall s. STRef s Int -> Arr.MutableArray s (Any -> result) -> ST s ())
 
-{- |
-  Selects a function out of some 'Branches' to use for a particular value. This
-  function picks the first function whose parameter type matches, which is
-  usually sufficient as @paramTypes@ will usually contain each type only once.
+{- | Selects a function out of some 'Branches' to use for a particular value. This function picks the
+  first function whose parameter type matches, which is usually sufficient as @paramTypes@ will
+  usually contain each type only once.
 
   If you need to select a particular index, use 'selectBranchAtProxy'.
+
+@since 0.1.0.0
 -}
 selectBranch ::
   (KnownNat branchIndex, branchIndex ~ FirstIndexOf param paramTypes) =>
@@ -121,10 +127,8 @@ selectBranch =
   selectBranchAtIndex firstIndexOfType
 {-# INLINE selectBranch #-}
 
-{- |
-  Selects the function out of 'Branches' at the given index so that it can be
-  used with the correct input parameter type. The index is specified via a proxy
-  value, like such:
+{- | Selects the function out of 'Branches' at the given index so that it can be used with the correct
+  input parameter type. The index is specified via a proxy value, like such:
 
   @
     selectBranchAtProxy (Proxy :: 1) branches
@@ -135,6 +139,8 @@ selectBranch =
   @
     selectBranchAtProxy @1 Proxy branches
   @
+
+@since 0.1.0.0
 -}
 selectBranchAtProxy ::
   (KnownNat branchIndex, param ~ TypeAtIndex branchIndex paramTypes) =>
@@ -146,9 +152,10 @@ selectBranchAtProxy proxy =
   selectBranchAtIndex (indexOfTypeAt proxy)
 {-# INLINE selectBranchAtProxy #-}
 
-{- |
-  Selects the function out of 'Branches' at the given index so that it can be
-  used with the correct input parameter type.
+{- | Selects the function out of 'Branches' at the given index so that it can be used with the correct
+  input parameter type.
+
+@since 0.1.0.0
 -}
 selectBranchAtIndex ::
   BranchIndex param paramTypes ->
@@ -162,10 +169,11 @@ selectBranchAtIndex branchIndex (Branches array) =
       (branchIndexToInt branchIndex)
 {-# INLINE selectBranchAtIndex #-}
 
-{- |
-  From a lexical code perspective you can think of this as "beginning" a branching
-  section (hence the name). It actually finalizes the building of branches to
-  optimized the lookup so that branch dispatching can be done in O(1) time.
+{- | From a lexical code perspective you can think of this as "beginning" a branching section (hence
+  the name). It actually finalizes the building of branches to optimized the lookup so that branch
+  dispatching can be done in O(1) time.
+
+@since 0.1.0.0
 -}
 branchBuild ::
   KnownLength paramTypes =>
@@ -184,12 +192,12 @@ branchBuild builder@(BranchBuilder populateBranches) =
         pure mutArray
 {-# INLINE branchBuild #-}
 
-{- |
-  Specifies how to handle a given position in a list of types. The function
-  parameter type is added to the front of the list of types for the branches
-  that are being constructed. This means that the branches must be specified
-  (from "top" to "bottom") in the same order they are given in the list or else
-  you get a compilation error.
+{- | Specifies how to handle a given position in a list of types. The function parameter type is added
+  to the front of the list of types for the branches that are being constructed. This means that the
+  branches must be specified (from "top" to "bottom") in the same order they are given in the list
+  or else you get a compilation error.
+
+@since 0.1.0.0
 -}
 branch ::
   (param -> result) ->
@@ -199,13 +207,13 @@ branch =
   appendBranches . singleBranch
 {-# INLINE branch #-}
 
-{- |
-  Sets the function that should be used to handle values of a particular type in
-  the branch set. This function will replace the existing handler for the first
-  occurence of the type in the branches. If you wish to have more control over the
-  index, use 'branchSetAtIndex'.
+{- | Sets the function that should be used to handle values of a particular type in the branch
+  set. This function will replace the existing handler for the first occurence of the type in the
+  branches. If you wish to have more control over the index, use 'branchSetAtIndex'.
 
   See also 'branchDefault'.
+
+@since 0.2.0.0
 -}
 branchSet ::
   forall param n paramTypes result.
@@ -219,11 +227,12 @@ branchSet =
   branchSetAtIndex firstIndexOfType
 {-# INLINE branchSet #-}
 
-{- |
-  Set the function that should be used to handle values at a particular index in
-  the branch set. This function will replace the existing handler at the index.
+{- | Set the function that should be used to handle values at a particular index in the branch
+  set. This function will replace the existing handler at the index.
 
   See also 'branchDefault'.
+
+@since 0.2.0.0
 -}
 branchSetAtIndex ::
   BranchIndex param paramTypes ->
@@ -245,11 +254,12 @@ branchSetAtIndex branchIndex branchFunction (BranchBuilder populateBranches) =
       populateBranches branchIndexRef array
       Arr.writeArray array (idx + branchOffset) (unsafeToBranch branchFunction)
 
-{- |
-  Initializes a branch builder that will return the specified value for all
-  branches, regardles of the value passed to select the branch. Usually this
-  is used in conjuctions with 'branchSet' or 'branchSetAtIndex' in cases where
-  you wish to specify the behavior of only a subset of branches explicitly.
+{- | Initializes a branch builder that will return the specified value for all branches, regardles of
+  the value passed to select the branch. Usually this is used in conjuctions with 'branchSet' or
+  'branchSetAtIndex' in cases where you wish to specify the behavior of only a subset of branches
+  explicitly.
+
+@since 0.2.0.0
 -}
 branchDefault ::
   result ->
@@ -257,11 +267,11 @@ branchDefault ::
 branchDefault defaultResult =
   branchDefaultWithIndex (const defaultResult)
 
-{- |
-  Similar to 'branchDefault', but allows the caller to use the index of the
-  branch to compute the default result. The index passed to the function is
-  equivalent to the index that would be obtained by calling 'branchIndexToInt'
-  on the 'BranchIndex' for a given type in @paramTypes@.
+{- | Similar to 'branchDefault', but allows the caller to use the index of the branch to compute the
+  default result. The index passed to the function is equivalent to the index that would be obtained
+  by calling 'branchIndexToInt' on the 'BranchIndex' for a given type in @paramTypes@.
+
+@since 0.2.3.0
 -}
 branchDefaultWithIndex ::
   (Int -> result) ->
@@ -284,20 +294,21 @@ branchDefaultWithIndex mkDefaultResult =
     -- we get the bounds correct here and don't overrun the array
     mapM_ setDefaultAt [defaultStartIndex .. (size - 1)]
 
-{- |
-  Indicates that there are no more branches to specify. This must appear as
-  the final entry in a sequence of 'branch' calls to handle the base case of
-  an empty type list, unless 'branchDefault' is used.
+{- | Indicates that there are no more branches to specify. This must appear as the final entry in a
+  sequence of 'branch' calls to handle the base case of an empty type list, unless 'branchDefault'
+  is used.
+
+@since 0.1.0.0
 -}
 branchEnd :: BranchBuilder '[] result
 branchEnd = BranchBuilder $ \_ _ -> pure ()
 {-# INLINE branchEnd #-}
 
-{- |
-  Specifies how to handle a given a single case in a standalone fashion. This
-  can be used togther with `appendBranches` to assemble a branch builder with
-  to cover all the desired cases without needing to begin with `branchEnd` and
-  add branches via `branch`.
+{- | Specifies how to handle a given a single case in a standalone fashion. This can be used togther
+  with `appendBranches` to assemble a branch builder with to cover all the desired cases without
+  needing to begin with `branchEnd` and add branches via `branch`.
+
+@since 0.1.2.0
 -}
 singleBranch :: (param -> result) -> BranchBuilder '[param] result
 singleBranch branchFunction =
@@ -307,9 +318,10 @@ singleBranch branchFunction =
     modifySTRef' branchIndexRef (+ 1)
 {-# INLINE singleBranch #-}
 
-{- |
-  Appends two 'BranchBuilder's to form a new 'BranchBuilder' that has branches
-  for all the types from both the original.
+{- | Appends two 'BranchBuilder's to form a new 'BranchBuilder' that has branches for all the types
+  from both the original.
+
+@since 0.1.1.0
 -}
 appendBranches ::
   BranchBuilder paramTypesA result ->

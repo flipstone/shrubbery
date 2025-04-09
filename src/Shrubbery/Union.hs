@@ -1,6 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -9,45 +7,49 @@
 {-# LANGUAGE TypeOperators #-}
 
 {- |
-  This module provides a implementation of a sum type whose members are
-  known in the type sysem and provides implementations of 'Dissection'
-  and 'Unification'. It can be used as such:
+Copyright : Flipstone Technology Partners 2021-2025
+License   : BSD3
 
-  @
-    type MyUnion = Union [Int, String]
+This module provides a implementation of a sum type whose members are known in the type sysem and
+provides implementations of 'Dissection' and 'Unification'. It can be used as such:
 
-    anInt :: MyUnion
-    anInt = unify (0 :: Int)
+@
+  type MyUnion = Union [Int, String]
 
-    aString :: MyUnion
-    aString = unify \"Foo\"
+  anInt :: MyUnion
+  anInt = unify (0 :: Int)
 
-    doSomething :: MyUnion -> String
-    doSomething =
-      dissect
-        $ branchBuild
-        $ branch (show :: Int -> String)
-        $ branch id
-        $ branchEnd
-  @
+  aString :: MyUnion
+  aString = unify \"Foo\"
 
-  Or you can use type applications:
+  doSomething :: MyUnion -> String
+  doSomething =
+    dissect
+      $ branchBuild
+      $ branch (show :: Int -> String)
+      $ branch id
+      $ branchEnd
+@
 
-  @
-    anInt :: MyUnion
-    anInt = unify \@Int 0
+Or you can use type applications:
 
-    aString :: MyUnion
-    aString = unify \@String \"Foo\"
+@
+  anInt :: MyUnion
+  anInt = unify \@Int 0
 
-    doSomething :: MyUnion -> String
-    doSomething =
-      dissect
-        $ branchBuild
-        $ branch \@Int    show
-        $ branch \@String id
-        $ branchEnd
-  @
+  aString :: MyUnion
+  aString = unify \@String \"Foo\"
+
+  doSomething :: MyUnion -> String
+  doSomething =
+    dissect
+      $ branchBuild
+      $ branch \@Int    show
+      $ branch \@String id
+      $ branchEnd
+@
+
+@since 0.1.0.0
 -}
 module Shrubbery.Union
   ( Union (Union)
@@ -66,8 +68,9 @@ import Shrubbery.Branches (Branches, selectBranchAtIndex)
 import Shrubbery.Classes (BranchTypes, Dissection (..), EqBranches, NFDataBranches, OrdBranches, ShowBranches, Unification (..), compareViaDissect, eqViaDissect, rnfViaDissect, showsPrecViaDissect)
 import Shrubbery.TypeList (FirstIndexOf, KnownLength)
 
-{- |
-  Defines a type whose value can be a value of any one of the specified types.
+{- | Defines a type whose value can be a value of any one of the specified types.
+
+@since 0.1.0.0
 -}
 data Union types where
   Union :: BranchIndex t types -> t -> Union types
@@ -86,13 +89,13 @@ instance (EqBranches types, OrdBranches types, KnownLength types, types ~ (first
 instance (NFDataBranches types, KnownLength types) => DeepSeq.NFData (Union types) where
   rnf = rnfViaDissect
 
-{- |
-  Selects a function from the branches based on the value contained within the
-  union. This choice is based entirely on the index specified (or inferred) at
-  the time the union was constructed, so there is no ambiguity if a type
-  appears multiple times in the 'Union'
+{- | Selects a function from the branches based on the value contained within the union. This choice
+  is based entirely on the index specified (or inferred) at the time the union was constructed, so
+  there is no ambiguity if a type appears multiple times in the 'Union'
 
   This is also available as the 'dissect' function from the 'Dissection' class.
+
+@since 0.1.0.0
 -}
 dissectUnion ::
   Branches types result ->
@@ -102,8 +105,7 @@ dissectUnion branches (Union branchIndex t) =
   selectBranchAtIndex branchIndex branches t
 {-# INLINE dissectUnion #-}
 
-{- |
-  Matches a 'Union' against one of its types, returning 'Just' the value if the
+{- | Matches a 'Union' against one of its types, returning 'Just' the value if the
   'Union' value is of that type, or 'Nothing' otherwise. Use with @TypeApplications@:
 
   @
@@ -113,6 +115,8 @@ dissectUnion branches (Union branchIndex t) =
   Note that this will always match the first instance of the type in the union types list.
 
   See 'matchUnionProxy' for a version that does not require @TypeApplications@.
+
+@since 0.2.2.0
 -}
 matchUnion ::
   forall t types branchIndex.
@@ -130,9 +134,8 @@ matchUnion (Union branchIndex t) =
       Just Refl -> Just t
       Nothing -> Nothing
 
-{- |
-  Matches a 'Union' against one of its types, returning 'Just' the value if the
-  'Union' value is of that type, or 'Nothing' otherwise, e.g.:
+{- | Matches a 'Union' against one of its types, returning 'Just' the value if the 'Union' value is of
+  that type, or 'Nothing' otherwise, e.g.:
 
   @
     matchUnionProxy (Proxy :: Proxy Int) myUnion
@@ -141,6 +144,8 @@ matchUnion (Union branchIndex t) =
   Note that this will always match the first instance of the type in the union types list.
 
   See 'matchUnion' for a version that uses @TypeApplications@ instead of a proxy.
+
+@since 0.2.2.0
 -}
 matchUnionProxy ::
   forall t types branchIndex proxy.
@@ -152,12 +157,13 @@ matchUnionProxy ::
   Maybe t
 matchUnionProxy _ = matchUnion
 
-{- |
-  Constructs a union based on the index of a member type in the list. This
-  function can be used rather than 'Shrubbery.Classes.unify' to disambiguate types that appear
-  multiple times in the list.
+{- | Constructs a union based on the index of a member type in the list. This function can be used
+  rather than 'Shrubbery.Classes.unify' to disambiguate types that appear multiple times in the
+  list.
 
   This is also available as 'unifyWithIndex' from the 'Unification' class.
+
+@since 0.1.0.0
 -}
 unifyUnion :: BranchIndex t types -> t -> Union types
 unifyUnion =
