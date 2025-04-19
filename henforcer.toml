@@ -4,9 +4,9 @@ maximumExportsPlusHeaderUndocumented = 1
 minimumExportsPlusHeaderDocumented = 0
 maximumExportsWithoutSince = 1
 minimumExportsWithSince = 0
-moduleHeaderCopyrightMustExistNonEmpty = false
+moduleHeaderCopyrightMustExistNonEmpty = true
 moduleHeaderDescriptionMustExistNonEmpty = false
-moduleHeaderLicenseMustExistNonEmpty = false
+moduleHeaderLicenseMustExistNonEmpty = true
 moduleHeaderMaintainerMustExistNonEmpty = false
 [[forPatternModules]]
 pattern = "Paths_*"

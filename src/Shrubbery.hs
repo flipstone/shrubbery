@@ -1,21 +1,25 @@
 {- |
-  @shrubbery@ provides programmatic branching constructs based on type-level
-  lists that can be used to write the equivalent of @case@ statements when the
-  number and types of cases are not known ahead of time by the programmer.
+Copyright : Flipstone Technology Partners 2021-2025
+License   : BSD3
 
-  This is useful for writing domain-specific languages that need to do
-  case analysis on sum types supplied by the user, which otherwise requires
-  the user to provide a function to do the case analysis on behalf of the
-  DSL.
+@shrubbery@ provides programmatic branching constructs based on type-level lists that can be used to
+write the equivalent of @case@ statements when the number and types of cases are not known ahead of
+time by the programmer.
 
-  See 'Shrubbery.Union' for a sum type that provides the required braching
-  functionality automatically.
+This is useful for writing domain-specific languages that need to do case analysis on sum types
+supplied by the user, which otherwise requires the user to provide a function to do the case
+analysis on behalf of the DSL.
 
-  See 'Shrubbery.Classes' for the typeclass interface that allows types
-  other than those in 'Shrubbery.Union' to provide branching functionality.
+See 'Shrubbery.Union' for a sum type that provides the required branching functionality
+automatically.
 
-  See 'Shrubbery.Branches' for the types and functions involved in building
-  and applying the case analysis itself.
+See 'Shrubbery.Classes' for the typeclass interface that allows types other than those in
+'Shrubbery.Union' to provide branching functionality.
+
+See 'Shrubbery.Branches' for the types and functions involved in building and applying the case
+analysis itself.
+
+@since 0.1.3.0
 -}
 module Shrubbery
   ( module Export
