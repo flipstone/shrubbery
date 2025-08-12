@@ -1,11 +1,11 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.38.0.
+-- This file has been generated from package.yaml by hpack version 0.38.1.
 --
 -- see: https://github.com/sol/hpack
 
 name:           shrubbery
-version:        0.2.3.0
+version:        0.2.3.1
 description:    Please see the README on GitHub at <https://github.com/flipstone/shrubbery#readme>
 homepage:       https://github.com/flipstone/shrubbery#readme
 bug-reports:    https://github.com/flipstone/shrubbery/issues
