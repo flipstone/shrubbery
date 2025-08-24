@@ -15,7 +15,7 @@ License   : BSD3
 -}
 module Shrubbery.TaggedUnion
   ( TaggedUnion
-  , unifyTaggedUnion
+  , unifyTaggedUnion 
   , TaggedBranches
   , taggedBranchBuild
   , dissectTaggedUnion
@@ -277,6 +277,7 @@ taggedSingleBranch branchFunction =
 @since 0.1.3.0
 -}
 appendTaggedBranches ::
+  forall taggedTypesA taggedTypesB result.
   Append (TaggedTypes taggedTypesA) (TaggedTypes taggedTypesB)
     ~ TaggedTypes (Append taggedTypesA taggedTypesB) =>
   TaggedBranchBuilder taggedTypesA result ->

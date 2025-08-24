@@ -41,6 +41,7 @@ library
       Shrubbery.TaggedUnion
       Shrubbery.TypeList
   other-modules:
+      Shrubbery.Taggable
       Paths_shrubbery
   hs-source-dirs:
       src
