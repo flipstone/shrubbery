@@ -37,9 +37,13 @@ library
       Shrubbery.BranchIndex
       Shrubbery.Generic
       Shrubbery.Parser
+      Shrubbery.Plugin
       Shrubbery.Union
       Shrubbery.TaggedUnion
       Shrubbery.TypeList
+      Shrubbery.IncrementalCase
+      Shrubbery.TypeLevel
+      Shrubbery.TH
   other-modules:
       Paths_shrubbery
   hs-source-dirs:
@@ -47,7 +51,9 @@ library
   build-depends:
       base >=4.13 && <5
     , deepseq >=1.4 && <=1.6
+    , ghc >=8.0 && <10.0
     , primitive >=0.7.3.0 && <0.10
+    , template-haskell
   default-language: Haskell2010
   if flag(ci)
     ghc-options: -O2 -Wall -Werror -Wcompat -Widentities -Wmissing-local-signatures -Wmissing-export-lists -Wpartial-fields -Wmissed-specialisations -Wunused-packages -Wno-implicit-prelude -Wno-safe -Wno-unsafe
@@ -83,6 +89,7 @@ test-suite shrubbery-test
     , primitive >=0.7.3.0 && <0.10
     , shrubbery
   default-language: Haskell2010
+  if flag(ci)
   if flag(ci)
     ghc-options: -O2 -Wall -Werror -Wcompat -Widentities -Wmissing-local-signatures -Wmissing-export-lists -Wpartial-fields -Wmissed-specialisations -Wno-implicit-prelude -Wno-safe -Wno-unsafe
     if impl (ghc >= 9.0)

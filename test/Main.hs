@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fplugin=Shrubbery.Plugin #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -21,8 +22,56 @@ import qualified Hedgehog.Range as Range
 import Text.Read (readMaybe)
 
 import Shrubbery
+    ( index0,
+      index1,
+      index2,
+      index3,
+      index4,
+      branch,
+      branchBuild,
+      branchDefault,
+      branchEnd,
+      branchSet,
+      selectBranch,
+      selectBranchAtProxy,
+      unify,
+      dissectTaggedUnion,
+      matchTaggedUnion,
+      taggedBranch,
+      taggedBranchBuild,
+      taggedBranchDefault,
+      taggedBranchEnd,
+      taggedBranchSet,
+      unifyTaggedUnion,
+      matchUnion,
+      Branches,
+      BranchTypes,
+      Dissection(..),
+      Unification(..),
+      TaggedBranches,
+      TaggedUnion,
+      type (@=),
+      Union )
+
 import Shrubbery.Generic
 import Shrubbery.Parser
+import Shrubbery.TypeLevel (matchDo, match, matchDone)
+
+{-# ANN type FooBarBaz "DeriveMatchable" #-}
+data FooBarBaz
+  = Foo Int
+  | Bar String
+  | Baz
+  deriving (Show, Eq)
+
+incrementalCase :: FooBarBaz -> String
+incrementalCase =
+  matchDo @FooBarBaz
+    . match @"Foo" show
+    . match @"Bar" id
+    . match @"Baz" (const "Baz")
+    $ matchDone
+
 
 main :: IO ()
 main =

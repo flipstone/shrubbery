@@ -32,7 +32,9 @@ library:
   dependencies:
     - base >= 4.13 && < 5
     - deepseq >= 1.4 && <= 1.6
+    - ghc >= 8.0 && < 10.0
     - primitive >= 0.7.3.0 && < 0.10
+    - template-haskell
   exposed-modules:
     - Shrubbery
     - Shrubbery.Classes
@@ -40,9 +42,13 @@ library:
     - Shrubbery.BranchIndex
     - Shrubbery.Generic
     - Shrubbery.Parser
+    - Shrubbery.Plugin
     - Shrubbery.Union
     - Shrubbery.TaggedUnion
     - Shrubbery.TypeList
+    - Shrubbery.IncrementalCase
+    - Shrubbery.TypeLevel
+    - Shrubbery.TH
   when:
     - condition: flag(ci)
       then:
@@ -102,6 +108,9 @@ tests:
     main: Main.hs
     source-dirs: test
     when:
+    source-dirs: test
+    when:
+      - condition: flag(ci)
       - condition: flag(ci)
         then:
           ghc-options:
