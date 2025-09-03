@@ -140,7 +140,7 @@ jobs:
 
           echo "PROJECT_DIR=$PWD" >> .env
           cp compose.override.github.yml compose.override.yml
-          sh -c scripts/shellcheck.sh
+          sh -c scripts/shellcheck
 
   cabal-latest-build:
     name: Cabal Build
@@ -171,4 +171,4 @@ jobs:
 
           echo "PROJECT_DIR=$PWD" >> .env
           cp compose.override.github.yml compose.override.yml
-          sh -c scripts/cabal-latest.sh
+          sh -c scripts/cabal-latest
