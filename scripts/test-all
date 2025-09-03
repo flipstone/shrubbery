@@ -9,6 +9,8 @@
 # then as the regular edit/compile/test loop to get feedback during
 # development.
 
+. scripts/lib/run-in-container.sh
+
 rm -rf test-all-logs
 mkdir test-all-logs
 
