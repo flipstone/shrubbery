@@ -108,9 +108,6 @@ tests:
     main: Main.hs
     source-dirs: test
     when:
-    source-dirs: test
-    when:
-      - condition: flag(ci)
       - condition: flag(ci)
         then:
           ghc-options:

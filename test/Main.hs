@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -fplugin=Shrubbery.Plugin #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -22,56 +21,10 @@ import qualified Hedgehog.Range as Range
 import Text.Read (readMaybe)
 
 import Shrubbery
-    ( index0,
-      index1,
-      index2,
-      index3,
-      index4,
-      branch,
-      branchBuild,
-      branchDefault,
-      branchEnd,
-      branchSet,
-      selectBranch,
-      selectBranchAtProxy,
-      unify,
-      dissectTaggedUnion,
-      matchTaggedUnion,
-      taggedBranch,
-      taggedBranchBuild,
-      taggedBranchDefault,
-      taggedBranchEnd,
-      taggedBranchSet,
-      unifyTaggedUnion,
-      matchUnion,
-      Branches,
-      BranchTypes,
-      Dissection(..),
-      Unification(..),
-      TaggedBranches,
-      TaggedUnion,
-      type (@=),
-      Union )
-
 import Shrubbery.Generic
 import Shrubbery.Parser
 import Shrubbery.TypeLevel (matchDo, match, matchDone)
-
-{-# ANN type FooBarBaz "DeriveMatchable" #-}
-data FooBarBaz
-  = Foo Int
-  | Bar String
-  | Baz
-  deriving (Show, Eq)
-
-incrementalCase :: FooBarBaz -> String
-incrementalCase =
-  matchDo @FooBarBaz
-    . match @"Foo" show
-    . match @"Bar" id
-    . match @"Baz" (const "Baz")
-    $ matchDone
-
+import FooBarBaz (FooBarBaz(..))
 
 main :: IO ()
 main =
@@ -97,6 +50,7 @@ main =
           , ("Tagged Union Eq instance matches derived Eq for equivalent sum type", prop_taggedUnionEqMatchesDerivedEq)
           , ("Union Ord instance matches derived Ord for equivalent sum type", prop_unionOrdMatchesDerivedOrd)
           , ("Tagged Union Ord instance matches derived Ord for equivalent sum type", prop_taggedUnionOrdMatchesDerivedOrd)
+          , ("Plugin DeriveMatchable Works", prop_pluginDerivedMatchable)
           ]
     ]
 
@@ -818,3 +772,20 @@ prop_taggedUnionOrdMatchesDerivedOrd =
       taggedUnionValue1 = ordSumToTaggedUnion value1
       taggedUnionValue2 = ordSumToTaggedUnion value2
     compare value1 value2 === compare taggedUnionValue1 taggedUnionValue2
+
+fooBarBazToString :: FooBarBaz -> String
+fooBarBazToString =
+  -- TODO: Do we actually need to explicitly mention the
+  -- argument types below.
+  matchDo @FooBarBaz
+    . match @"Foo" (show :: Int -> String)
+    . match @"Bar" id
+    . match @"Baz" (\() -> "Baz")
+    $ matchDone
+
+prop_pluginDerivedMatchable :: HH.Property
+prop_pluginDerivedMatchable =
+  HH.withTests 1 . HH.property $ do
+    fooBarBazToString (Foo 1) === "1"
+    fooBarBazToString (Bar "Hello") === "Hello"
+    fooBarBazToString Baz === "Baz"
