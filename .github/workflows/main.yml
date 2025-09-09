@@ -12,23 +12,24 @@ defaults:
     shell: bash
 
 jobs:
+  find-stack-yamls:
+    name: Find stack.yamls for GHC Matrix
+    runs-on: ubuntu-22.04
+    outputs:
+      stack-yamls: ${{ steps.set-output.outputs.stack-yamls }}
+    steps:
+      - name: Find Stack Yamls
+        id: set-output
+        uses: flipstone/github-actions/find-stack-ghc-yamls@bef3396e6c3777767d1d4837203cfdb2635b4933
+
   build:
     name: Build and Test
+    needs: find-stack-yamls
     runs-on: ubuntu-22.04
     strategy:
       max-parallel: 5
       matrix:
-        stack-yaml: ["stack-ghc-8.10.yaml",
-                     "stack-ghc-9.0.yaml",
-                     "stack-ghc-9.2.yaml",
-                     "stack-ghc-9.4.yaml",
-                     "stack-ghc-9.8.yaml",
-                     "stack-ghc-9.10.yaml",
-                     "stack.yaml"]
-    permissions:
-      packages: write
-      contents: read
-      actions: read
+        stack-yaml: ${{ fromJson(needs.find-stack-yamls.outputs.stack-yamls) }}
 
     steps:
       - name: Checkout
@@ -38,27 +39,20 @@ jobs:
         uses: actions/cache@v4
         env:
           cache-version: v3
-          stack-yaml-path: "${{ matrix.stack-yaml }}"
         with:
-          key: ${{ env.cache-version }}-${{ env.stack-yaml-path }}-${{ hashFiles('shrubbery.cabal') }}
+          key: ${{ env.cache-version }}-${{ matrix.stack-yaml }}-${{ hashFiles(matrix.stack-yaml, 'stack-base.yaml', 'package.yaml') }}
           restore-keys: |
-            ${{ env.cache-version }}-
+            ${{ env.cache-version }}-${{ matrix.stack-yaml }}-
           path: |
             ./stack-root
 
-      - name: Build and test
-        run: |
-          set -o errexit
+      - name: Setup Stack
+        uses: flipstone/github-actions/setup-dockerized-stack@bef3396e6c3777767d1d4837203cfdb2635b4933
+        with:
+          stack-root: ./stack-root
 
-          mkdir -p ./stack-root
-          echo "PROJECT_DIR=$PWD" >> .env
-          mv compose.override.github.yml compose.override.yml
-          docker compose run \
-            --rm \
-            shrubbery \
-            stack --stack-yaml ${{ matrix.stack-yaml }} test \
-            --ghc-options=-j --flag shrubbery:ci
-          docker compose run --rm shrubbery chmod -R +r /stack-root
+      - name: Build and test
+        run: ./scripts/test --stack-yaml ${{ matrix.stack-yaml }}
 
   formatting-check:
     name: Formatting Check
@@ -70,25 +64,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache
-        uses: actions/cache/restore@v4
-        env:
-          cache-version: v4
+      - name: Setup Stack (for docker env)
+        uses: flipstone/github-actions/setup-dockerized-stack@bef3396e6c3777767d1d4837203cfdb2635b4933
         with:
-          key: ${{ env.cache-version }}-${{ hashFiles('stack*.yaml') }}-${{ hashFiles('shrubbery.cabal') }}
-          restore-keys: |
-            ${{ env.cache-version }}-
-          path: |
-            ./stack-root
+          stack-root: ./stack-root
 
       - name: Format and Check for Diff
-        run: |
-          set -o errexit
-
-          mkdir -p ./stack-root
-          echo "PROJECT_DIR=$PWD" >> .env
-          cp compose.override.github.yml compose.override.yml
-          docker compose run --rm shrubbery sh -c ./scripts/format-repo
+        run: ./scripts/format-repo
 
   cabal-check:
     name: Cabal Check
@@ -97,24 +79,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache
-        uses: actions/cache/restore@v4
-        env:
-          cache-version: v3
+      - name: Setup Stack (for docker env)
+        uses: flipstone/github-actions/setup-dockerized-stack@bef3396e6c3777767d1d4837203cfdb2635b4933
         with:
-          key: ${{ env.cache-version }}-${{ hashFiles('stack*.yaml') }}-${{ hashFiles('shrubbery.cabal') }}
-          restore-keys: |
-            ${{ env.cache-version }}-
-          path: |
-            ./stack-root
+          stack-root: ./stack-root
 
       - name: Check for Hackage releasable issues
-        run: |
-          set -o errexit
-
-          echo "PROJECT_DIR=$PWD" >> .env
-          cp compose.override.github.yml compose.override.yml
-          docker compose run --rm shrubbery cabal check
+        run: docker compose run --rm dev cabal check
 
   shellcheck:
     name: shellcheck
@@ -123,24 +94,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache
-        uses: actions/cache/restore@v4
-        env:
-          cache-version: v3
+      - name: Setup Stack (for docker env)
+        uses: flipstone/github-actions/setup-dockerized-stack@bef3396e6c3777767d1d4837203cfdb2635b4933
         with:
-          key: ${{ env.cache-version }}-${{ hashFiles('stack*.yaml') }}-${{ hashFiles('shrubbery.cabal') }}
-          restore-keys: |
-            ${{ env.cache-version }}-
-          path: |
-            ./stack-root
+          stack-root: ./stack-root
 
       - name: Format and Check for Diff
-        run: |
-          set -o errexit
-
-          echo "PROJECT_DIR=$PWD" >> .env
-          cp compose.override.github.yml compose.override.yml
-          sh -c scripts/shellcheck
+        run: scripts/shellcheck
 
   cabal-latest-build:
     name: Cabal Build
@@ -149,16 +109,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache
-        uses: actions/cache/restore@v4
-        env:
-          cache-version: format-v1
+      - name: Setup Stack (for docker env)
+        uses: flipstone/github-actions/setup-dockerized-stack@bef3396e6c3777767d1d4837203cfdb2635b4933
         with:
-          key: ${{ env.cache-version }}-${{ hashFiles('stack*.yaml') }}-${{ hashFiles('shrubbery.cabal') }}
-          restore-keys: |
-            ${{ env.cache-version }}-
-          path: |
-            ./stack-root
+          stack-root: ./stack-root
 
       - name: Build with cabal and latest ghc+deps
         # When a new ghc version is released, we might not be able to build all the dependencies for
@@ -166,9 +120,4 @@ jobs:
         # github does not give us a better UX for this as the closest thing to a required check is
         # not configured here, but seemingly only through the api/webui for "branch protection"
         continue-on-error: true
-        run: |
-          set -o errexit
-
-          echo "PROJECT_DIR=$PWD" >> .env
-          cp compose.override.github.yml compose.override.yml
-          sh -c scripts/cabal-latest
+        run: scripts/cabal-latest

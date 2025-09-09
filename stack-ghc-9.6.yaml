@@ -1,5 +1,7 @@
 <<: !include stack-base.yaml
-resolver: lts-21.22
+
+resolver: lts-22.39
+
 extra-deps:
   - git: https://github.com/flipstone/henforcer.git
     commit: f3c2b1e461a37e7ff88d795379edd7386bfa8557

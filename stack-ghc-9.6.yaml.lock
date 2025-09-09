@@ -22,9 +22,23 @@ packages:
       size: 1182
   original:
     hackage: pollock-0.1.0.3
+- completed:
+    hackage: tomland-1.3.3.3@sha256:5a1883fbe1a59bc3e70b3058ca2e1d0fa4add0727f1f3154fbb2f69339fd9429,9404
+    pantry-tree:
+      sha256: 0cb3d9f13b2fe45c2f87331aaa5fcc9ce74e1be50f48a70eeb98556de61c72db
+      size: 6430
+  original:
+    hackage: tomland-1.3.3.3
+- completed:
+    hackage: validation-selective-0.2.0.0@sha256:3fb7836ae5c8be1b41a69f31944c3a8dcf1b8d934ceb68b4989bc55aaad39316,3917
+    pantry-tree:
+      sha256: e3526138fffe9a7c59b1903376689f94f1ea9c87771ab6408f8bf9f89aef2663
+      size: 697
+  original:
+    hackage: validation-selective-0.2.0.0
 snapshots:
 - completed:
-    sha256: d347039f81388e16ea93ddaf9ff1850abfba8f8680ff75fbdd177692542ceb26
-    size: 726286
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/8.yaml
-  original: lts-24.8
+    sha256: 6c5aeace2ca5ecde793a9e0acfaa730ec8f384aa2f6183a2a252f5f9ec55d623
+    size: 720039
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/39.yaml
+  original: lts-22.39

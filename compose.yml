@@ -1,5 +1,5 @@
 services:
-  shrubbery:
+  dev:
     image: ghcr.io/flipstone/haskell-tools:debian-ghc-9.6.6-54c3115
     volumes:
       - .:${PROJECT_DIR}

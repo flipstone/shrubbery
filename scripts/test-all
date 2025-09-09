@@ -14,7 +14,7 @@
 rm -rf test-all-logs
 mkdir test-all-logs
 
-for stack_file in stack*.yaml; do
+for stack_file in stack-ghc*.yaml; do
   log_file="./test-all-logs/$stack_file.log"
 
   echo "Testing with $stack_file... "

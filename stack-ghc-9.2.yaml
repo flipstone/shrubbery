@@ -1,8 +1,2 @@
----
+<<: !include stack-base.yaml
 resolver: lts-20.26
-packages:
-  - .
-allow-different-user: true
-flags:
-  shrubbery:
-    ci: true

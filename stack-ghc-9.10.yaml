@@ -1,11 +1,5 @@
----
-resolver: nightly-2025-01-01
-packages:
-  - .
-allow-different-user: true
-flags:
-  shrubbery:
-    ci: true
+<<: !include stack-base.yaml
+resolver: lts-24.8
 extra-deps:
   - git: https://github.com/flipstone/henforcer.git
     commit: f3c2b1e461a37e7ff88d795379edd7386bfa8557
