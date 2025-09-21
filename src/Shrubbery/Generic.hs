@@ -141,11 +141,12 @@ type family GenericBranchTypes (rep :: Type -> Type) :: [Type] where
 @since 0.1.1.0
 -}
 class GenericUnion (rep :: Type -> Type) where
-  -- | 'genericToUnion' allows a sum type with a 'Generic' representation of multiple
-  --    single-argument constructors to be converted to a 'Union' of its 'GenericBranchTypes'.
-  --
-  --    Warning: See the discussion in the module documentation for a reason you
-  --    might not actually want to do this.
+  {- | 'genericToUnion' allows a sum type with a 'Generic' representation of multiple
+   single-argument constructors to be converted to a 'Union' of its 'GenericBranchTypes'.
+
+   Warning: See the discussion in the module documentation for a reason you
+   might not actually want to do this.
+  -}
   genericToUnion :: rep p -> Union (GenericBranchTypes rep)
 
   constructorForIndex :: BranchIndex t (GenericBranchTypes rep) -> t -> rep p

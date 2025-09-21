@@ -81,11 +81,12 @@ type family BranchTypes a :: [Type]
 @since 0.1.0.0
 -}
 class Dissection a where
-  -- | Implementations of this must call the appropriate function in the given branches depending on
-  --    the construction of the value @a@. If 'BranchTypes a' contains duplicate types, the
-  --    implmentation should be careful to call the correct one in each case.
-  --
-  -- @since 0.1.0.0
+  {- | Implementations of this must call the appropriate function in the given branches depending on
+   the construction of the value @a@. If 'BranchTypes a' contains duplicate types, the
+   implmentation should be careful to call the correct one in each case.
+
+  @since 0.1.0.0
+  -}
   dissect :: Branches (BranchTypes a) result -> a -> result
 
 {- | A 'Unification' provides a means to construct a sum type by embedding the members of the sum.
@@ -93,11 +94,12 @@ class Dissection a where
 @since 0.1.0.0
 -}
 class Unification a where
-  -- | Embeds a member of the sum in the sum by specifying its index. This index-based interface is
-  --    required by implementors to ensure there is not ambiguity when 'BranchTypes a' contains
-  --    duplicates.
-  --
-  -- @since 0.1.0.0
+  {- | Embeds a member of the sum in the sum by specifying its index. This index-based interface is
+   required by implementors to ensure there is not ambiguity when 'BranchTypes a' contains
+   duplicates.
+
+  @since 0.1.0.0
+  -}
   unifyWithIndex :: BranchIndex t (BranchTypes a) -> t -> a
 
 {- | Constructs a sum type by embedding a member type within it.
