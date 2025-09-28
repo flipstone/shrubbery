@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 {- |
 Copyright : Flipstone Technology Partners 2021-2025
@@ -28,6 +29,8 @@ module Shrubbery.TaggedUnion
   , appendTaggedBranches
   , taggedBranchSet
   , taggedBranchDefault
+  , selectTaggedBranchAtProxy
+  , DissectSum(..)
   ) where
 
 import qualified Control.DeepSeq as DeepSeq
@@ -36,7 +39,7 @@ import GHC.TypeLits (KnownNat, Symbol)
 
 import Data.Type.Equality ((:~:) (..))
 import Shrubbery.BranchIndex (indexOfTypeAt, testBranchIndexEquality)
-import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch)
+import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch, selectBranchAtIndex)
 import Shrubbery.Classes (EqBranches, NFDataBranches, OrdBranches, ShowBranches, unifyWithIndex)
 import Shrubbery.TypeList (Append, KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex, type (@=))
 import Shrubbery.Union (Union (Union), dissectUnion)
@@ -205,6 +208,25 @@ matchTaggedUnionProxy ::
   Maybe t
 matchTaggedUnionProxy _ = matchTaggedUnion @tag
 {-# INLINE matchTaggedUnionProxy #-}
+
+class DissectSum sumType tags result where
+  dissectSum :: TaggedBranches tags result -> sumType -> result
+  
+selectTaggedBranchAtProxy ::
+  forall (tag :: Symbol) t taggedTypes n proxy result.
+  ( TagType tag taggedTypes ~ t
+  , KnownNat n
+  , TagIndex tag taggedTypes ~ n
+  , TypeAtIndex n (TaggedTypes taggedTypes) ~ t
+  ) =>
+  TaggedBranches taggedTypes result ->
+  proxy tag ->
+  t ->
+  result
+selectTaggedBranchAtProxy (TaggedBranches branches) _proxy =
+  selectBranchAtIndex (indexOfTypeAt (Proxy :: Proxy n)) branches
+{-# INLINE selectTaggedBranchAtProxy #-}
+
 
 {- | Like 'branchBuild', this finishes the building of a tagged branch set so that it can be used with
   'dissectTagUnion'.

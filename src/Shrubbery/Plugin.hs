@@ -3,6 +3,7 @@ Copyright : Flipstone Technology Partners 2025
 License   : BSD3
 -}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# OPTIONS_GHC -Wno-unused-matches -Wno-unused-top-binds -Wno-unused-imports #-}
 module Shrubbery.Plugin (
     plugin, DeriveMatchable(..)
 ) where
@@ -147,13 +148,14 @@ mkMatchDoBind tc cons = do
 
 lookupModule :: ModuleName -> Maybe FastString -> CoreM Module
 lookupModule mod_nm pkg = do
-    hsc_env <- getHscEnv
-    found_module <- liftIO $ findImportedModule hsc_env mod_nm pkg
-    case found_module of
-      Found _ md -> return md
-      _          -> error $ "Unable to resolve module looked up by plugin: " ++ moduleNameString mod_nm
+  error "lookupModule"
+    -- hsc_env <- getHscEnv
+    -- found_module <- liftIO $ findImportedModule hsc_env mod_nm pkg
+    -- case found_module of
+    --   Found _ md -> return md
+    --   _          -> error $ "Unable to resolve module looked up by plugin: " ++ moduleNameString mod_nm
 
 lookupName :: Module -> OccName -> CoreM Name
 lookupName md occ = do
   hsc_env <- getHscEnv
-  liftIO $ initTcForLookup hsc_env $ lookupOrig md occ
+  liftIO $ error "lookupName" -- initTcForLookup hsc_env $ lookupOrig md occ

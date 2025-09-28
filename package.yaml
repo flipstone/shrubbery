@@ -36,6 +36,10 @@ library:
     - primitive >= 0.7.3.0 && < 0.10
     - template-haskell
   exposed-modules:
+    - MyShow
+    - MyPlugin
+    - Shrubbery.Plugin.MyShow
+
     - Shrubbery
     - Shrubbery.Classes
     - Shrubbery.Branches
@@ -162,3 +166,4 @@ tests:
       - primitive >= 0.7.3.0 && < 0.10
       - shrubbery
       - hedgehog
+      - ghc-prim

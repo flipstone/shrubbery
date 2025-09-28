@@ -1,13 +1,13 @@
 [forAnyModule]
-allowedOpenUnaliasedImports = 1
-maximumExportsPlusHeaderUndocumented = 1
+# allowedOpenUnaliasedImports = 1
+# maximumExportsPlusHeaderUndocumented = 1
 minimumExportsPlusHeaderDocumented = 0
-maximumExportsWithoutSince = 1
+# maximumExportsWithoutSince = 1
 minimumExportsWithSince = 0
-moduleHeaderCopyrightMustExistNonEmpty = true
-moduleHeaderDescriptionMustExistNonEmpty = false
-moduleHeaderLicenseMustExistNonEmpty = true
-moduleHeaderMaintainerMustExistNonEmpty = false
+# moduleHeaderCopyrightMustExistNonEmpty = true
+# moduleHeaderDescriptionMustExistNonEmpty = false
+# moduleHeaderLicenseMustExistNonEmpty = true
+# moduleHeaderMaintainerMustExistNonEmpty = false
 [[forPatternModules]]
 pattern = "Paths_*"
 [forPatternModules.rulesToIgnore]

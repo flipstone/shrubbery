@@ -31,6 +31,9 @@ flag ci
 
 library
   exposed-modules:
+      MyShow
+      MyPlugin
+      Shrubbery.Plugin.MyShow
       Shrubbery
       Shrubbery.Classes
       Shrubbery.Branches
@@ -86,6 +89,7 @@ test-suite shrubbery-test
       test
   build-depends:
       base >=4.14 && <5
+    , ghc-prim
     , hedgehog
     , primitive >=0.7.3.0 && <0.10
     , shrubbery

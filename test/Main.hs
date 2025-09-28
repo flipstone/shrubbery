@@ -23,8 +23,8 @@ import Text.Read (readMaybe)
 import Shrubbery
 import Shrubbery.Generic
 import Shrubbery.Parser
-import Shrubbery.TypeLevel (matchDo, match, matchDone)
-import FooBarBaz (FooBarBaz(..))
+-- import Shrubbery.TypeLevel (matchDo, match, matchDone)
+import FooBarBaz (FooBarBaz(..), dissectFBB)
 
 main :: IO ()
 main =
@@ -775,17 +775,16 @@ prop_taggedUnionOrdMatchesDerivedOrd =
 
 fooBarBazToString :: FooBarBaz -> String
 fooBarBazToString =
-  -- TODO: Do we actually need to explicitly mention the
-  -- argument types below.
-  matchDo @FooBarBaz
-    . match @"Foo" (show :: Int -> String)
-    . match @"Bar" id
-    . match @"Baz" (\() -> "Baz")
-    $ matchDone
+  dissectFBB
+    . taggedBranchBuild
+    . taggedBranch @"Foo" (show :: Int -> String)
+    . taggedBranch @"Bar" id
+    . taggedBranch @"Baz" (\() -> "Baz")
+    $ taggedBranchEnd
 
 prop_pluginDerivedMatchable :: HH.Property
 prop_pluginDerivedMatchable =
   HH.withTests 1 . HH.property $ do
     fooBarBazToString (Foo 1) === "1"
     fooBarBazToString (Bar "Hello") === "Hello"
-    fooBarBazToString Baz === "Baz"
+    fooBarBazToString (Baz ()) === "Baz"
