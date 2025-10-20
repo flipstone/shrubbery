@@ -1,6 +1,8 @@
 [language-server.haskell-language-server]
-command = "docker"
-args = ["compose", "run", "--rm", "-T", "shrubbery", "haskell-language-server-wrapper", "--lsp"]
+command = "haskell-language-server-wrapper"
+args = ["--lsp"]
 
 [language-server.haskell-language-server.config]
 haskell.formattingProvider = "fourmolu"
+# Uncomment this to stop the HLS crash from happening
+# haskell.plugin.hlint.globalOn = false

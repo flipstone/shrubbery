@@ -3,7 +3,7 @@ services:
     image: ghcr.io/flipstone/haskell-tools:debian-ghc-9.10.3-b5fe85f
     volumes:
       - .:${PROJECT_DIR}
-      - flipstone_stack_root:/stack-root
+      - stack_root:/stack-root
     environment:
       STACK_ROOT: /stack-root
       IN_DEV_CONTAINER: 'true'
@@ -14,5 +14,4 @@ services:
     tty: true
 
 volumes:
-  flipstone_stack_root:
-    external: true
+  stack_root:
