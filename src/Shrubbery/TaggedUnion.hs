@@ -9,7 +9,7 @@
 
 {- |
 Copyright : Flipstone Technology Partners 2021-2025
-License   : BSD3
+License   : MIT
 
 @since 0.1.3.0
 -}

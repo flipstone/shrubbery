@@ -9,7 +9,7 @@
 
 {- |
 Copyright : Flipstone Technology Partners 2021-2025
-License   : BSD3
+License   : MIT
 
 This module provides type families that are useful for working with type-level lists. Usually you
   won't need to use these types directly as while using this package, but they may occasionally come

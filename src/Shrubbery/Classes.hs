@@ -12,7 +12,7 @@
 
 {- |
 Copyright : Flipstone Technology Partners 2021-2025
-License   : BSD3
+License   : MIT
 
 This module provides typeclasses for constructing and deconstructing types that have branches in
 them. This is to say, sum types or any type that can present a sum-type-like interface.

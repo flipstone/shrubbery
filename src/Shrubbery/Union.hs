@@ -8,7 +8,7 @@
 
 {- |
 Copyright : Flipstone Technology Partners 2021-2025
-License   : BSD3
+License   : MIT
 
 This module provides a implementation of a sum type whose members are known in the type sysem and
 provides implementations of 'Dissection' and 'Unification'. It can be used as such:

@@ -5,7 +5,7 @@
 
 {- |
 Copyright : Flipstone Technology Partners 2021-2025
-License   : BSD3
+License   : MIT
 
 This modules provides functionality similar to Haskell's built-in case statements, but which can be
 built at run time without losing exhaustivity checking. The technique to satisfy both these desires

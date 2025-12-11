@@ -7,7 +7,7 @@
 
 {- |
 Copyright : Flipstone Technology Partners 2022-2025
-License   : BSD3
+License   : MIT
 
 This module provides tools that can be use in conjuction with the 'GHC.Generics' module to implement
 Shrubbery's 'Dissection' and 'Unification' classes (and the 'BranchTypes' type family) with simple

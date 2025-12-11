@@ -1,6 +1,6 @@
 {- |
 Copyright : Flipstone Technology Partners 2021-2025
-License   : BSD3
+License   : MIT
 
 @shrubbery@ provides programmatic branching constructs based on type-level lists that can be used to
 write the equivalent of @case@ statements when the number and types of cases are not known ahead of

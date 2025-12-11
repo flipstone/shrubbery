@@ -6,7 +6,7 @@
 
 {- |
 Copyright : Flipstone Technology Partners 2021-2025
-License   : BSD3
+License   : MIT
 
 This module provides facilities for parsing input values into sum types that implement the
 'Unification' type classes. A 'Parser' is constructed by giving a handler for each type in the union

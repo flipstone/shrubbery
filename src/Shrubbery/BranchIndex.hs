@@ -6,7 +6,7 @@
 
 {- |
 Copyright : Flipstone Technology Partners 2021-2025
-License   : BSD3
+License   : MIT
 
 This module provides types and functions for finding and using the index of a type within a
 type-level list.
