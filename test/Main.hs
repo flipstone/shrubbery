@@ -775,7 +775,7 @@ prop_taggedUnionOrdMatchesDerivedOrd =
 -- Source Plugin tests
 
 data Animal = Cat Int | Dog String | Parrot Bool
-  deriving ShrubberyMagic
+  deriving (ShrubberyMagic)
 
 prop_sourcePluginDeriveTaggedInstances :: HH.Property
 prop_sourcePluginDeriveTaggedInstances =

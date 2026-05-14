@@ -30,9 +30,12 @@ module Shrubbery.GHCCompat
   , mkFunBind
   , mkHsOpTy
   , mkGRHS
+  , mkHsPar
+  , mkHsCase
   , mkFamEqnPats
   , mkClsInstDeclExt
   , mkSigPat
+  , noAnnEpAnn
   , wrapParsedResultAction
   ) where
 
@@ -442,22 +445,81 @@ mkGRHS :: GHC.LHsExpr GHC.GhcPs -> Syntax.LGRHS GHC.GhcPs (GHC.LHsExpr GHC.GhcPs
 mkGRHS body =
   mkLocated (Syntax.GRHS Ann.noAnn [] body)
 
+{- | Construct an 'HsPar' expression, abstracting over the token fields added in GHC 9.4
+  and removed again in GHC 9.10.
+
+@since 0.2.4.0
+-}
+mkHsPar :: GHC.LHsExpr GHC.GhcPs -> GHC.LHsExpr GHC.GhcPs
+#if MIN_VERSION_ghc(9,10,0)
+mkHsPar expr =
+  mkLocated (Syntax.HsPar Ann.noAnn expr)
+#else
+mkHsPar expr =
+  mkLocated (Syntax.HsPar Ann.noAnn (SrcLoc.L Ann.NoTokenLoc GHC.HsTok) expr (SrcLoc.L Ann.NoTokenLoc GHC.HsTok))
+#endif
+
+{- | Construct an 'HsCase' expression, abstracting over the token field added in GHC 9.4
+  and removed again in GHC 9.10.
+
+@since 0.2.4.0
+-}
+mkHsCase ::
+  GHC.LHsExpr GHC.GhcPs ->
+  Syntax.MatchGroup GHC.GhcPs (GHC.LHsExpr GHC.GhcPs) ->
+  GHC.LHsExpr GHC.GhcPs
+#if MIN_VERSION_ghc(9,10,0)
+mkHsCase scrutinee mg =
+  mkLocated (Syntax.HsCase Ann.noAnn scrutinee mg)
+#else
+mkHsCase scrutinee mg =
+  mkLocated (Syntax.HsCase Ann.noAnn scrutinee mg)
+#endif
+
 {- | Construct family equation patterns, abstracting over the difference between
   GHC versions (some use @[LHsTypeArg]@, others use @[LHsType]@).
 
 @since 0.2.4.0
 -}
+#if MIN_VERSION_ghc(9,10,0)
 mkFamEqnPats :: [GHC.LHsType GHC.GhcPs] -> Syntax.HsFamEqnPats GHC.GhcPs
 mkFamEqnPats tys =
   fmap (\ty -> Syntax.HsValArg GHC.noExtField ty) tys
+#elif MIN_VERSION_ghc(9,8,0)
+mkFamEqnPats :: [GHC.LHsType GHC.GhcPs] -> Syntax.HsTyPats GHC.GhcPs
+mkFamEqnPats tys =
+  fmap Syntax.HsValArg tys
+#else
+mkFamEqnPats :: [GHC.LHsType GHC.GhcPs] -> [GHC.LHsTypeArg GHC.GhcPs]
+mkFamEqnPats tys =
+  fmap Syntax.HsValArg tys
+#endif
+
+{- | An empty annotation value suitable for extension fields that are @[AddEpAnn]@ on GHC 9.10+
+  and @EpAnn [AddEpAnn]@ on earlier versions.
+
+@since 0.2.4.0
+-}
+#if MIN_VERSION_ghc(9,10,0)
+noAnnEpAnn :: [Ann.AddEpAnn]
+noAnnEpAnn = []
+#else
+noAnnEpAnn :: Ann.EpAnn [Ann.AddEpAnn]
+noAnnEpAnn = Ann.noAnn
+#endif
 
 {- | Construct the extension field for 'ClsInstDecl', which differs across GHC versions.
 
 @since 0.2.4.0
 -}
 mkClsInstDeclExt :: Syntax.XCClsInstDecl GHC.GhcPs
+#if MIN_VERSION_ghc(9,10,0)
 mkClsInstDeclExt =
   (Nothing, [], Ann.NoAnnSortKey)
+#else
+mkClsInstDeclExt =
+  (Ann.noAnn, Ann.NoAnnSortKey)
+#endif
 
 {- | Construct a signature pattern @(pat :: ty)@.
 
@@ -472,4 +534,8 @@ mkSigPat pat ty =
         , Syntax.hsps_body = ty
         }
   in
+#if MIN_VERSION_ghc(9,10,0)
     Syntax.SigPat [] pat patSigType
+#else
+    Syntax.SigPat Ann.noAnn pat patSigType
+#endif

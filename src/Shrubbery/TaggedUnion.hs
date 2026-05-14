@@ -40,7 +40,7 @@ import GHC.TypeLits (KnownNat, Symbol)
 import Data.Type.Equality ((:~:) (..))
 import Shrubbery.BranchIndex (indexOfTypeAt, testBranchIndexEquality)
 import Shrubbery.Classes (EqBranches, NFDataBranches, OrdBranches, ShowBranches, TaggedBranchTypes, TaggedDissection (..), TaggedUnification (..), unifyWithIndex)
-import Shrubbery.TaggedBranches (TaggedBranches (TaggedBranches), TaggedBranchBuilder, appendTaggedBranches, selectBranchAtTag, selectTaggedBranchAtIndex, taggedBranch, taggedBranchBuild, taggedBranchDefault, taggedBranchEnd, taggedBranchSet, taggedSingleBranch)
+import Shrubbery.TaggedBranches (TaggedBranchBuilder, TaggedBranches (TaggedBranches), appendTaggedBranches, selectBranchAtTag, selectTaggedBranchAtIndex, taggedBranch, taggedBranchBuild, taggedBranchDefault, taggedBranchEnd, taggedBranchSet, taggedSingleBranch)
 import Shrubbery.TypeList (KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex)
 import Shrubbery.Union (Union (Union), dissectUnion)
 
@@ -121,8 +121,7 @@ instance TaggedDissection (TaggedUnion taggedTypes) where
 @since 0.2.4.0
 -}
 instance
-  ( KnownLength (TaggedTypes taggedTypes)
-  ) =>
+  KnownLength (TaggedTypes taggedTypes) =>
   TaggedUnification (TaggedUnion taggedTypes)
   where
   unifyTaggedWithTag (_ :: proxy tag) =

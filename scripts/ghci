@@ -4,4 +4,9 @@ set -o errexit
 
 . scripts/lib/run-in-container.sh
 
-stack exec ghci -- -v0 -package ghc "$@"
+STACK_YAML_OPT=""
+if [ -n "$STACK_YAML" ]; then
+  STACK_YAML_OPT="--stack-yaml $STACK_YAML"
+fi
+
+stack $STACK_YAML_OPT exec ghci -- -v0 -package ghc "$@"

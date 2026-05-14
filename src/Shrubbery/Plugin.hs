@@ -80,8 +80,9 @@ processDecls ::
 processDecls decls =
   Right (concatMap processDecl decls)
 
--- | Process a single declaration. If it is a data decl with @deriving ShrubberyMagic@,
---   strip the clause and emit the data decl followed by generated instance decls.
+{- | Process a single declaration. If it is a data decl with @deriving ShrubberyMagic@,
+  strip the clause and emit the data decl followed by generated instance decls.
+-}
 processDecl ::
   GHC.LHsDecl GHC.GhcPs ->
   [GHC.LHsDecl GHC.GhcPs]
@@ -113,8 +114,9 @@ processDecl lDecl@(SrcLoc.L loc decl) =
     _ ->
       [lDecl]
 
--- | Check if any deriving clause is @deriving ShrubberyMagic@. If found, return the
---   remaining clauses with the magic one removed.
+{- | Check if any deriving clause is @deriving ShrubberyMagic@. If found, return the
+  remaining clauses with the magic one removed.
+-}
 extractShrubberyMagicClause ::
   [GHC.LHsDerivingClause GHC.GhcPs] ->
   Maybe [GHC.LHsDerivingClause GHC.GhcPs]
@@ -216,7 +218,7 @@ typeNodeToString hsType =
 
 -- | Instance generation
 
-{- | Generate: @type instance TaggedBranchTypes ADT = '[\"Con1\" \@= Type1, ...]@ -}
+-- | Generate: @type instance TaggedBranchTypes ADT = '[\"Con1\" \@= Type1, ...]@
 generateTaggedBranchTypesDecl ::
   String ->
   [ConstructorInfo] ->
@@ -238,7 +240,7 @@ generateTaggedBranchTypesDecl adtName constructors =
     famEqn :: Syntax.TyFamInstEqn GHC.GhcPs
     famEqn =
       Syntax.FamEqn
-        { Syntax.feqn_ext = []
+        { Syntax.feqn_ext = Compat.noAnnEpAnn
         , Syntax.feqn_tycon = tyConName
         , Syntax.feqn_bndrs = Syntax.HsOuterImplicit GHC.noExtField
         , Syntax.feqn_pats = Compat.mkFamEqnPats [adtTy]
@@ -249,7 +251,7 @@ generateTaggedBranchTypesDecl adtName constructors =
     tyFamInstDecl :: Syntax.TyFamInstDecl GHC.GhcPs
     tyFamInstDecl =
       Syntax.TyFamInstDecl
-        { Syntax.tfid_xtn = []
+        { Syntax.tfid_xtn = Compat.noAnnEpAnn
         , Syntax.tfid_eqn = famEqn
         }
 
@@ -301,7 +303,8 @@ generateDissectionInstDecl adtName constructors =
 
 {- | Generate a single case alternative for TaggedDissection:
 
-  @Con val -> selectBranchAtTag \@"Con" branches val@ -}
+  @Con val -> selectBranchAtTag \@"Con" branches val@
+-}
 generateDissectionCaseAlt ::
   ConstructorInfo ->
   GHC.LMatch GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
@@ -417,8 +420,13 @@ generateTaggedBranchChain constructors =
 mkClassInstHead :: String -> String -> GHC.LHsSigType GHC.GhcPs
 mkClassInstHead className adtName =
   let
+    classTy :: GHC.LHsType GHC.GhcPs
     classTy = mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTcOcc className))
+
+    adtTy :: GHC.LHsType GHC.GhcPs
     adtTy = mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTcOcc adtName))
+
+    appTy :: GHC.LHsType GHC.GhcPs
     appTy =
       Compat.mkLocated
         ( Syntax.HsAppTy
@@ -463,7 +471,7 @@ mkClsInstDecl instHead binds =
 -- | Wrap an expression in parentheses: @(expr)@
 mkHsPar :: GHC.LHsExpr GHC.GhcPs -> GHC.LHsExpr GHC.GhcPs
 mkHsPar expr =
-  Compat.mkLocated (Syntax.HsPar Ann.noAnn expr)
+  Compat.mkHsPar expr
 
 -- | Make a wildcard-wrapped type variable, for use in type applications.
 mkHsWcTyVar :: String -> GHC.LHsWcType GHC.GhcPs
@@ -476,11 +484,18 @@ mkHsWcTyVar name =
 mkTypedWildPat :: String -> String -> GHC.LPat GHC.GhcPs
 mkTypedWildPat tyConName tyVarName =
   let
+    tyConTy :: GHC.LHsType GHC.GhcPs
     tyConTy = mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTyVarOcc tyConName))
+
+    tyVarTy :: GHC.LHsType GHC.GhcPs
     tyVarTy = mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTyVarOcc tyVarName))
+
+    appTy :: GHC.LHsType GHC.GhcPs
     appTy =
       Compat.mkLocated
         (Syntax.HsAppTy GHC.noExtField tyConTy tyVarTy)
+
+    wildPat :: GHC.LPat GHC.GhcPs
     wildPat = Compat.mkLocated (Syntax.WildPat GHC.noExtField)
   in
     Compat.mkLocated (Compat.mkSigPat wildPat appTy)
@@ -553,7 +568,7 @@ mkHsCase scrutinee alts =
   let
     mg = Compat.mkMatchGroup (Compat.mkLocated alts)
   in
-    Compat.mkLocated (Syntax.HsCase Ann.noAnn scrutinee mg)
+    Compat.mkHsCase scrutinee mg
 
 mkGRHSs :: [GHC.LGRHS GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)] -> GHC.GRHSs GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
 mkGRHSs grhsList =
@@ -589,4 +604,3 @@ mkSingleMatchGroup funName pats body =
           }
   in
     Compat.mkMatchGroup (Compat.mkLocated [match])
-
