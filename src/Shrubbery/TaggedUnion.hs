@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -16,8 +17,10 @@ License   : BSD3
 module Shrubbery.TaggedUnion
   ( TaggedUnion
   , unifyTaggedUnion
-  , TaggedBranches
+  , TaggedBranches (TaggedBranches)
   , taggedBranchBuild
+  , selectTaggedBranchAtIndex
+  , selectBranchAtTag
   , dissectTaggedUnion
   , matchTaggedUnion
   , matchTaggedUnionProxy
@@ -36,9 +39,9 @@ import GHC.TypeLits (KnownNat, Symbol)
 
 import Data.Type.Equality ((:~:) (..))
 import Shrubbery.BranchIndex (indexOfTypeAt, testBranchIndexEquality)
-import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch)
-import Shrubbery.Classes (EqBranches, NFDataBranches, OrdBranches, ShowBranches, unifyWithIndex)
-import Shrubbery.TypeList (Append, KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex, type (@=))
+import Shrubbery.Classes (EqBranches, NFDataBranches, OrdBranches, ShowBranches, TaggedBranchTypes, TaggedDissection (..), TaggedUnification (..), unifyWithIndex)
+import Shrubbery.TaggedBranches (TaggedBranches (TaggedBranches), TaggedBranchBuilder, appendTaggedBranches, selectBranchAtTag, selectTaggedBranchAtIndex, taggedBranch, taggedBranchBuild, taggedBranchDefault, taggedBranchEnd, taggedBranchSet, taggedSingleBranch)
+import Shrubbery.TypeList (KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex)
 import Shrubbery.Union (Union (Union), dissectUnion)
 
 {- | 'TaggedUnion' provides a variation on the 'Union' concept that allows a type-level string symbol
@@ -100,31 +103,37 @@ instance
   rnf (TaggedUnion union) =
     DeepSeq.rnf union
 
-{- | Similar to 'Branches', 'TaggedBranches' contains an array of functions that have different
-  parameter types, but produce the same result. The @taggedTypes@ list of tags indicates the types
-  of the input parameters, in order and tagged with their associated type-level symbols for
-  reference.
+{- |
 
-@since 0.1.3.0
+@since 0.2.4.0
 -}
-newtype TaggedBranches (taggedTypes :: [Tag]) result
-  = TaggedBranches (Branches (TaggedTypes taggedTypes) result)
+type instance TaggedBranchTypes (TaggedUnion taggedTypes) = taggedTypes
 
-{- | Similar to 'BranchBuilder', 'TaggedBranchBuilder' is an efficient interface for building a
-  'TaggedBranches'. Use 'taggedBranchBuild' to "execute" the 'TaggedBranchBuilder' to make
-  'TaggedBranches'.
+{- |
 
-@since 0.1.3.0
+@since 0.2.4.0
 -}
-newtype TaggedBranchBuilder (taggedTypes :: [Tag]) result
-  = TaggedBranchBuilder (BranchBuilder (TaggedTypes taggedTypes) result)
+instance TaggedDissection (TaggedUnion taggedTypes) where
+  dissectTagged = dissectTaggedUnion
+
+{- |
+
+@since 0.2.4.0
+-}
+instance
+  ( KnownLength (TaggedTypes taggedTypes)
+  ) =>
+  TaggedUnification (TaggedUnion taggedTypes)
+  where
+  unifyTaggedWithTag (_ :: proxy tag) =
+    unifyTaggedUnion @tag
 
 {- | Constructs a tagged union based on the tag of a member type in the list.  The tag must be
   supplied via @TypeApplications@. For instance:
 
   @
-    a :: TaggedUnion ["foo" @= String, "bar" @= String]
-    a = unifyTaggedUnion @"bar" "bar-value"
+    a :: TaggedUnion ["foo" \@= String, "bar" \@= String]
+    a = unifyTaggedUnion \@"bar" "bar-value"
   @
 
 @since 0.1.3.0
@@ -160,7 +169,7 @@ dissectTaggedUnion (TaggedBranches branches) (TaggedUnion union) =
   'TaggedUnion' value is of that tag and type, or 'Nothing' otherwise.  Use with @TypeApplications@:
 
   @
-    matchTaggedUnion @"tag" someTaggedUnion
+    matchTaggedUnion \@"tag" someTaggedUnion
   @
 
   See 'matchTaggedUnionProxy' for a version that does not require @TypeApplications@.
@@ -205,123 +214,3 @@ matchTaggedUnionProxy ::
   Maybe t
 matchTaggedUnionProxy _ = matchTaggedUnion @tag
 {-# INLINE matchTaggedUnionProxy #-}
-
-{- | Like 'branchBuild', this finishes the building of a tagged branch set so that it can be used with
-  'dissectTagUnion'.
-
-@since 0.1.3.0
--}
-taggedBranchBuild ::
-  ( KnownLength types
-  , types ~ TaggedTypes taggedTypes
-  ) =>
-  TaggedBranchBuilder taggedTypes result ->
-  TaggedBranches taggedTypes result
-taggedBranchBuild (TaggedBranchBuilder builder) =
-  TaggedBranches (branchBuild builder)
-{-# INLINE taggedBranchBuild #-}
-
-{- | Similar to 'branch'. Specifies how to handle a given tag in a list of tagged types. The function
-  parameter type and tag is added to the front of the list of tagged types for the branches that are
-  being constructed. This means that the branches must be specified (from "top" to "bottom") in the
-  same order they are given in the list or else you get a compilation error. The tag must be
-  supplied via @TypeApplications@:
-
-  @
-    branches :: TaggedBranches ["foo" @= String, "bar" @= String] String
-    branches =
-      taggedBranchBuild
-      . taggedBranch @"foo" doSomethingWithFooString
-      . taggedBranch @"bar" doSomethingwithBarString
-      $ taggedBranchEnd
-  @
-
-@since 0.1.3.0
--}
-taggedBranch ::
-  forall (tag :: Symbol) typ result taggedTypes.
-  (typ -> result) ->
-  TaggedBranchBuilder taggedTypes result ->
-  TaggedBranchBuilder ((tag @= typ) : taggedTypes) result
-taggedBranch =
-  appendTaggedBranches . taggedSingleBranch
-{-# INLINE taggedBranch #-}
-
-{- | Similar to 'branchEnd'. Indicates that there are no more branches to specify.  This must appear
-  as the final entry in a sequence of 'taggedBranch' calls to handle the base case of an empty type
-  list, unless 'taggedBranchDefault' is used.
-
-@since 0.1.3.0
--}
-taggedBranchEnd :: TaggedBranchBuilder '[] result
-taggedBranchEnd =
-  TaggedBranchBuilder branchEnd
-{-# INLINE taggedBranchEnd #-}
-
-{- | Similar to 'singleBranch'. Specifies how to handle a given a single case in a standalone
-  fashion. This can be used togther with `appendTaggedBranches` to assemble a branch builder with to
-  cover all the desired cases without needing to begin with `taggedBranchEnd` and add branches via
-  `taggedBranch`.
--}
-taggedSingleBranch ::
-  forall (tag :: Symbol) typ result.
-  (typ -> result) ->
-  TaggedBranchBuilder '[tag @= typ] result
-taggedSingleBranch branchFunction =
-  TaggedBranchBuilder (singleBranch branchFunction)
-{-# INLINE taggedSingleBranch #-}
-
-{- | Similar to 'appendBranches'. Appends two 'TaggedBranchBuilder's to form a new
-  'TaggedBranchBuilder' that has branches for all the types from both the original.
-
-@since 0.1.3.0
--}
-appendTaggedBranches ::
-  Append (TaggedTypes taggedTypesA) (TaggedTypes taggedTypesB)
-    ~ TaggedTypes (Append taggedTypesA taggedTypesB) =>
-  TaggedBranchBuilder taggedTypesA result ->
-  TaggedBranchBuilder taggedTypesB result ->
-  TaggedBranchBuilder (Append taggedTypesA taggedTypesB) result
-appendTaggedBranches (TaggedBranchBuilder branchesA) (TaggedBranchBuilder branchesB) =
-  TaggedBranchBuilder (appendBranches branchesA branchesB)
-{-# INLINE appendTaggedBranches #-}
-
-{- | Similar to 'setBranchAtIndex'. Sets the function that should be used to handle values of a
-  particular tag symbal in the branch set. This function will replace the existing handler for the
-  first occurence of the type in the branches. The tag must be specified via @TypeApplications@:
-
-  @
-    branches :: TaggedBranches ["foo" @= String, "bar" @= String, "baz" @= Int] String
-    branches =
-      taggedBranchBuild
-      . taggedBranchSet @"bar" doSomethingwithBarString
-      $ taggedBranchDefault "default-value"
-  @
-
-  See also 'taggedBranchDefault'.
-
-@since 0.2.0.0
--}
-taggedBranchSet ::
-  forall (tag :: Symbol) typ result taggedTypes n.
-  ( KnownNat n
-  , n ~ TagIndex tag taggedTypes
-  , typ ~ TypeAtIndex n (TaggedTypes taggedTypes)
-  ) =>
-  (typ -> result) ->
-  TaggedBranchBuilder taggedTypes result ->
-  TaggedBranchBuilder taggedTypes result
-taggedBranchSet branchFunction (TaggedBranchBuilder builder) =
-  TaggedBranchBuilder (branchSetAtIndex (indexOfTypeAt (Proxy :: Proxy n)) branchFunction builder)
-{-# INLINE taggedBranchSet #-}
-
-{- | Similar to 'branchDefault'. Initializes a branch builder that will return the specified value for
-  all branches, regardles of the value passed to select the branch. Usually this is used in
-  conjuctions with 'taggedBranchSet'.
-
-@since 0.2.0.0
--}
-taggedBranchDefault :: result -> TaggedBranchBuilder taggedTypes result
-taggedBranchDefault =
-  TaggedBranchBuilder . branchDefault
-{-# INLINE taggedBranchDefault #-}

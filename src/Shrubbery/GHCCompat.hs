@@ -29,10 +29,15 @@ module Shrubbery.GHCCompat
   , getDataDefnCons
   , getGADTConName
   , mkHsTyLit
+  , mkHsNumTyLit
   , mkFunBind
   , mkHsOpTy
   , matchHsOpTy
   , mkGRHS
+  , mkFamEqnPats
+  , mkClsInstDeclExt
+  , mkExprSig
+  , mkSigPat
   , wrapParsedResultAction
   ) where
 
@@ -493,3 +498,63 @@ matchHsOpTy ty =
 mkGRHS :: GHC.LHsExpr GHC.GhcPs -> Syntax.LGRHS GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
 mkGRHS body =
   mkLocated (Syntax.GRHS Ann.noAnn [] body)
+
+{- | Construct a numeric type literal, e.g. @0@, @1@, etc. at the type level.
+
+@since 0.2.4.0
+-}
+mkHsNumTyLit :: Integer -> GHC.HsType GHC.GhcPs
+mkHsNumTyLit n =
+  let
+    tyLit :: Syntax.HsTyLit GHC.GhcPs
+    tyLit = Syntax.HsNumTy SourceText.NoSourceText n
+  in
+    Syntax.HsTyLit GHC.noExtField tyLit
+
+{- | Construct family equation patterns, abstracting over the difference between
+  GHC versions (some use @[LHsTypeArg]@, others use @[LHsType]@).
+
+@since 0.2.4.0
+-}
+mkFamEqnPats :: [GHC.LHsType GHC.GhcPs] -> Syntax.HsFamEqnPats GHC.GhcPs
+mkFamEqnPats tys =
+  fmap (\ty -> Syntax.HsValArg GHC.noExtField ty) tys
+
+{- | Construct the extension field for 'ClsInstDecl', which differs across GHC versions.
+
+@since 0.2.4.0
+-}
+mkClsInstDeclExt :: Syntax.XCClsInstDecl GHC.GhcPs
+mkClsInstDeclExt =
+  (Nothing, [], Ann.NoAnnSortKey)
+
+{- | Construct an expression with a type signature: @(expr :: sigType)@.
+
+@since 0.2.4.0
+-}
+mkExprSig :: GHC.HsExpr GHC.GhcPs -> GHC.LHsSigType GHC.GhcPs -> GHC.HsExpr GHC.GhcPs
+mkExprSig expr sigTy =
+  let
+    sigWcType :: GHC.LHsSigWcType GHC.GhcPs
+    sigWcType =
+      Syntax.HsWC
+        { Syntax.hswc_ext = GHC.noExtField
+        , Syntax.hswc_body = sigTy
+        }
+  in
+    Syntax.ExprWithTySig [] (mkLocated expr) sigWcType
+
+{- | Construct a signature pattern @(pat :: ty)@.
+
+@since 0.2.4.0
+-}
+mkSigPat :: GHC.LPat GHC.GhcPs -> GHC.LHsType GHC.GhcPs -> GHC.Pat GHC.GhcPs
+mkSigPat pat ty =
+  let
+    patSigType =
+      Syntax.HsPS
+        { Syntax.hsps_ext = Ann.noAnn
+        , Syntax.hsps_body = ty
+        }
+  in
+    Syntax.SigPat [] pat patSigType

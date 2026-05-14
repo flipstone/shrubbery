@@ -23,7 +23,7 @@ import Text.Read (readMaybe)
 import Shrubbery
 import Shrubbery.Generic
 import Shrubbery.Parser
-import Shrubbery.Plugin (magicToTaggedUnion, magicToTaggedUnionInferType)
+import Shrubbery.Plugin (magicToTaggedUnion, magicToTaggedUnionInferType, magicDeriveTaggedInstances)
 
 main :: IO ()
 main =
@@ -52,6 +52,7 @@ main =
           , ("Source plugin generates correct conversion", prop_sourcePluginConversion)
           , ("Source plugin newtype conversion", prop_sourcePluginNewtypeConversion)
           , ("Source plugin infer type conversion", prop_sourcePluginInferType)
+          , ("Source plugin derive tagged instances", prop_sourcePluginDeriveTaggedInstances)
           ]
     ]
 
@@ -863,3 +864,86 @@ prop_sourcePluginInferType =
           (veggieToTaggedUnion (Potato "spud"))
     resultCarrot === "99"
     resultPotato === "spud"
+
+-- Source Plugin derive tagged instances tests
+
+data Animal = Cat Int | Dog String | Parrot Bool
+
+deriveAnimalInstances = magicDeriveTaggedInstances @Animal
+
+prop_sourcePluginDeriveTaggedInstances :: HH.Property
+prop_sourcePluginDeriveTaggedInstances =
+  HH.property $ do
+    let
+      resultCat =
+        dissectTagged
+          ( taggedBranchBuild
+              . taggedBranch @"Cat" show
+              . taggedBranch @"Dog" id
+              . taggedBranch @"Parrot" show
+              $ taggedBranchEnd
+          )
+          (Cat 42)
+
+      resultDog =
+        dissectTagged
+          ( taggedBranchBuild
+              . taggedBranch @"Cat" show
+              . taggedBranch @"Dog" id
+              . taggedBranch @"Parrot" show
+              $ taggedBranchEnd
+          )
+          (Dog "woof")
+
+      resultParrot =
+        dissectTagged
+          ( taggedBranchBuild
+              . taggedBranch @"Cat" show
+              . taggedBranch @"Dog" id
+              . taggedBranch @"Parrot" show
+              $ taggedBranchEnd
+          )
+          (Parrot True)
+
+      rebuiltCat :: Animal
+      rebuiltCat = unifyTagged @"Cat" (42 :: Int)
+
+      rebuiltDog :: Animal
+      rebuiltDog = unifyTagged @"Dog" "woof"
+
+      rebuiltParrot :: Animal
+      rebuiltParrot = unifyTagged @"Parrot" True
+
+    resultCat === "42"
+    resultDog === "woof"
+    resultParrot === "True"
+
+    dissectTagged
+      ( taggedBranchBuild
+          . taggedBranch @"Cat" show
+          . taggedBranch @"Dog" id
+          . taggedBranch @"Parrot" show
+          $ taggedBranchEnd
+      )
+      rebuiltCat
+      === "42"
+
+    dissectTagged
+      ( taggedBranchBuild
+          . taggedBranch @"Cat" show
+          . taggedBranch @"Dog" id
+          . taggedBranch @"Parrot" show
+          $ taggedBranchEnd
+      )
+      rebuiltDog
+      === "woof"
+
+    dissectTagged
+      ( taggedBranchBuild
+          . taggedBranch @"Cat" show
+          . taggedBranch @"Dog" id
+          . taggedBranch @"Parrot" show
+          $ taggedBranchEnd
+      )
+      rebuiltParrot
+      === "True"

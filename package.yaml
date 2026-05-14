@@ -43,6 +43,7 @@ library:
     - Shrubbery.Parser
     - Shrubbery.Plugin
     - Shrubbery.Union
+    - Shrubbery.TaggedBranches
     - Shrubbery.TaggedUnion
     - Shrubbery.TypeList
   other-modules:

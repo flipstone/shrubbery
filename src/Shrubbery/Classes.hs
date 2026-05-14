@@ -1,8 +1,10 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ExplicitForAll #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -48,6 +50,10 @@ module Shrubbery.Classes
   , Dissection (..)
   , Unification (..)
   , unify
+  , TaggedBranchTypes
+  , TaggedDissection (..)
+  , TaggedUnification (..)
+  , unifyTagged
   , ShowBranches
   , showsPrecViaDissect
   , EqBranches
@@ -60,11 +66,13 @@ module Shrubbery.Classes
 
 import qualified Control.DeepSeq as DeepSeq
 import Data.Kind (Constraint, Type)
-import GHC.TypeLits (KnownNat)
+import Data.Proxy (Proxy (Proxy))
+import GHC.TypeLits (KnownNat, Symbol)
 
 import Shrubbery.BranchIndex (BranchIndex, TypeZipper, branchIndexToInt, firstIndexOfType, indexOfFocusedType, moveZipperNext, startZipper)
 import Shrubbery.Branches (BranchBuilder, Branches, branch, branchBuild, branchDefault, branchDefaultWithIndex, branchEnd, branchSetAtIndex)
-import Shrubbery.TypeList (FirstIndexOf, KnownLength, ZippedTypes)
+import Shrubbery.TaggedBranches (TaggedBranches)
+import Shrubbery.TypeList (FirstIndexOf, KnownLength, Tag, TagIndex, TagType, TaggedTypes, TypeAtIndex, ZippedTypes)
 
 {- | This type family is used by both 'Dissection' and 'Unification' to specify
   the types of the values available in the branching type. If you provided
@@ -120,6 +128,103 @@ unify ::
   a
 unify =
   unifyWithIndex firstIndexOfType
+
+{- | This type family is used by both 'TaggedDissection' and 'TaggedUnification' to specify the
+  tagged types of the values available in the branching type. If you provide instances of
+  'TaggedDissection' or 'TaggedUnification', you'll need to provide an instance of this type family
+  as well.
+
+  Example:
+
+  @
+    data Fruit = Apple Int | Banana String
+
+    type instance TaggedBranchTypes Fruit = '["Apple" \@= Int, "Banana" \@= String]
+  @
+
+@since 0.2.4.0
+-}
+type family TaggedBranchTypes a :: [Tag]
+
+{- | A 'TaggedDissection' provides a way to "dissect" a sum type via case analysis using
+  'TaggedBranches'. This is the tagged analogue of 'Dissection'.
+
+  Example:
+
+  @
+    instance TaggedDissection Fruit where
+      dissectTagged branches fruit =
+        case fruit of
+          Apple val -> selectTaggedBranchAtIndex index0 branches val
+          Banana val -> selectTaggedBranchAtIndex index1 branches val
+  @
+
+@since 0.2.4.0
+-}
+class TaggedDissection a where
+  {- | Implementations of this must call the appropriate function in the given branches depending on
+   the construction of the value @a@.
+
+  @since 0.2.4.0
+  -}
+  dissectTagged :: TaggedBranches (TaggedBranchTypes a) result -> a -> result
+
+{- | A 'TaggedUnification' provides a means to construct a sum type by embedding a member, selected
+  by its tag symbol. This is the tagged analogue of 'Unification'.
+
+  Example:
+
+  @
+    instance TaggedUnification Fruit where
+      unifyTaggedWithTag _ =
+        selectBranchAtIndex (indexOfTypeAt (Proxy :: Proxy n))
+          $ branchBuild
+          $ branch Apple
+          $ branch Banana
+          $ branchEnd
+  @
+
+@since 0.2.4.0
+-}
+class TaggedUnification a where
+  {- | Constructs a value of type @a@ by embedding a member selected by the given tag symbol.
+   The tag must be supplied via a proxy value or @TypeApplications@.
+
+  @since 0.2.4.0
+  -}
+  unifyTaggedWithTag ::
+    forall (tag :: Symbol) typ n proxy.
+    ( TagType tag (TaggedBranchTypes a) ~ typ
+    , KnownNat n
+    , TagIndex tag (TaggedBranchTypes a) ~ n
+    , TypeAtIndex n (TaggedTypes (TaggedBranchTypes a)) ~ typ
+    ) =>
+    proxy tag ->
+    typ ->
+    a
+
+{- | Constructs a sum type by embedding a member type selected by its tag symbol. The tag must be
+  supplied via @TypeApplications@:
+
+  @
+    apple :: Fruit
+    apple = unifyTagged \@"Apple" (42 :: Int)
+  @
+
+@since 0.2.4.0
+-}
+unifyTagged ::
+  forall (tag :: Symbol) a typ n.
+  ( TaggedUnification a
+  , TagType tag (TaggedBranchTypes a) ~ typ
+  , KnownNat n
+  , TagIndex tag (TaggedBranchTypes a) ~ n
+  , TypeAtIndex n (TaggedTypes (TaggedBranchTypes a)) ~ typ
+  ) =>
+  typ ->
+  a
+unifyTagged =
+  unifyTaggedWithTag (Proxy :: Proxy tag)
 
 {- | 'ShowBranches' is provided as a convenience for implementing 'Show' on sum types via
   'Dissection'. See 'showsPrecViaDissect' for the most common way to make use of this.
