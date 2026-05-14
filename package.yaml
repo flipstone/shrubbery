@@ -32,6 +32,7 @@ library:
   dependencies:
     - base >= 4.13 && < 5
     - deepseq >= 1.4 && <= 1.6
+    - ghc >= 9.4
     - primitive >= 0.7.3.0 && < 0.10
   exposed-modules:
     - Shrubbery
@@ -40,9 +41,12 @@ library:
     - Shrubbery.BranchIndex
     - Shrubbery.Generic
     - Shrubbery.Parser
+    - Shrubbery.Plugin
     - Shrubbery.Union
     - Shrubbery.TaggedUnion
     - Shrubbery.TypeList
+  other-modules:
+    - Shrubbery.GHCCompat
   when:
     - condition: flag(ci)
       then:
@@ -101,6 +105,8 @@ tests:
   shrubbery-test:
     main: Main.hs
     source-dirs: test
+    ghc-options:
+      - -fplugin Shrubbery.Plugin
     when:
       - condition: flag(ci)
         then:

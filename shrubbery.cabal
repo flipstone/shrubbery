@@ -37,16 +37,18 @@ library
       Shrubbery.BranchIndex
       Shrubbery.Generic
       Shrubbery.Parser
+      Shrubbery.Plugin
       Shrubbery.Union
       Shrubbery.TaggedUnion
       Shrubbery.TypeList
   other-modules:
-      Paths_shrubbery
+      Shrubbery.GHCCompat
   hs-source-dirs:
       src
   build-depends:
       base >=4.13 && <5
     , deepseq >=1.4 && <=1.6
+    , ghc >=9.4
     , primitive >=0.7.3.0 && <0.10
   default-language: Haskell2010
   if flag(ci)
@@ -77,6 +79,7 @@ test-suite shrubbery-test
       Paths_shrubbery
   hs-source-dirs:
       test
+  ghc-options: -fplugin Shrubbery.Plugin
   build-depends:
       base >=4.14 && <5
     , hedgehog
