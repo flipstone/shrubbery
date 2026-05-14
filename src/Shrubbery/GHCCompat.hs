@@ -15,8 +15,6 @@ module Shrubbery.GHCCompat
   ( mkLocated
   , mkHsApp
   , mkHsAppType
-  , mkFunTy
-  , matchHsAppType
   , noSrcStrict
   , notPromoted
   , isPromoted
@@ -29,14 +27,11 @@ module Shrubbery.GHCCompat
   , getDataDefnCons
   , getGADTConName
   , mkHsTyLit
-  , mkHsNumTyLit
   , mkFunBind
   , mkHsOpTy
-  , matchHsOpTy
   , mkGRHS
   , mkFamEqnPats
   , mkClsInstDeclExt
-  , mkExprSig
   , mkSigPat
   , wrapParsedResultAction
   ) where
@@ -143,25 +138,6 @@ mkHsAppType fun tyArg =
   mkLocated (Syntax.HsAppType SrcLoc.noSrcSpan fun tyArg)
 #endif
 
-{- | Construct a function type @arg -> result@.
-
-  Handles the difference in arrow representation and 'HsFunTy' extension field across GHC versions.
-
-@since 0.2.3.2
--}
-mkFunTy :: GHC.LHsType GHC.GhcPs -> GHC.LHsType GHC.GhcPs -> GHC.LHsType GHC.GhcPs
-mkFunTy argTy resultTy =
-  let
-#if MIN_VERSION_ghc(9,10,0)
-    arrow = Syntax.HsUnrestrictedArrow Ann.noAnn
-  in
-    mkLocated (Syntax.HsFunTy GHC.noExtField arrow argTy resultTy)
-#else
-    arrow = Syntax.HsUnrestrictedArrow (SrcLoc.L Ann.NoTokenLoc GHC.HsNormalTok)
-  in
-    mkLocated (Syntax.HsFunTy Ann.noAnn arrow argTy resultTy)
-#endif
-
 {- | Wrap a declaration-processing function into a full 'parsedResultAction' handler.
 
   After successful declaration processing, any import list entries whose names appear in the
@@ -228,24 +204,6 @@ mkPsError srcSpan msg =
     . Error.UnknownDiagnostic
 #endif
     $ Error.mkPlainError [] (Outputable.text msg)
-
-{- | Match an 'HsAppType' expression, abstracting over field differences across GHC versions.
-
-  Returns the function expression and the type argument if the expression is an 'HsAppType'.
-
-@since 0.2.3.2
--}
-matchHsAppType :: GHC.HsExpr GHC.GhcPs -> Maybe (GHC.LHsExpr GHC.GhcPs, GHC.LHsWcType GHC.GhcPs)
-matchHsAppType expr =
-  case expr of
-#if MIN_VERSION_ghc(9,10,0)
-    Syntax.HsAppType _ fun tyArg -> Just (fun, tyArg)
-#elif MIN_VERSION_ghc(9,6,0)
-    Syntax.HsAppType _ fun _ tyArg -> Just (fun, tyArg)
-#else
-    Syntax.HsAppType _ fun tyArg -> Just (fun, tyArg)
-#endif
-    _ -> Nothing
 
 {- | The 'NoSrcStrict' value, whose module location varies across GHC versions.
 
@@ -476,21 +434,6 @@ mkHsOpTy ::
 mkHsOpTy lhs op rhs =
   Syntax.HsOpTy Ann.noAnn notPromoted lhs op rhs
 
-{- | Deconstruct an 'HsOpTy' node, abstracting over the 'PromotionFlag' field added in GHC 9.4.
-
-  Returns the operator name, the left-hand side, and the right-hand side if the type
-  is an 'HsOpTy'.
-
-@since 0.2.3.2
--}
-matchHsOpTy ::
-  GHC.HsType GHC.GhcPs ->
-  Maybe (GHC.LIdP GHC.GhcPs, GHC.LHsType GHC.GhcPs, GHC.LHsType GHC.GhcPs)
-matchHsOpTy ty =
-  case ty of
-    Syntax.HsOpTy _ _ lhs op rhs -> Just (op, lhs, rhs)
-    _ -> Nothing
-
 {- | Construct a guarded right-hand side.
 
 @since 0.2.3.2
@@ -498,18 +441,6 @@ matchHsOpTy ty =
 mkGRHS :: GHC.LHsExpr GHC.GhcPs -> Syntax.LGRHS GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
 mkGRHS body =
   mkLocated (Syntax.GRHS Ann.noAnn [] body)
-
-{- | Construct a numeric type literal, e.g. @0@, @1@, etc. at the type level.
-
-@since 0.2.4.0
--}
-mkHsNumTyLit :: Integer -> GHC.HsType GHC.GhcPs
-mkHsNumTyLit n =
-  let
-    tyLit :: Syntax.HsTyLit GHC.GhcPs
-    tyLit = Syntax.HsNumTy SourceText.NoSourceText n
-  in
-    Syntax.HsTyLit GHC.noExtField tyLit
 
 {- | Construct family equation patterns, abstracting over the difference between
   GHC versions (some use @[LHsTypeArg]@, others use @[LHsType]@).
@@ -527,22 +458,6 @@ mkFamEqnPats tys =
 mkClsInstDeclExt :: Syntax.XCClsInstDecl GHC.GhcPs
 mkClsInstDeclExt =
   (Nothing, [], Ann.NoAnnSortKey)
-
-{- | Construct an expression with a type signature: @(expr :: sigType)@.
-
-@since 0.2.4.0
--}
-mkExprSig :: GHC.HsExpr GHC.GhcPs -> GHC.LHsSigType GHC.GhcPs -> GHC.HsExpr GHC.GhcPs
-mkExprSig expr sigTy =
-  let
-    sigWcType :: GHC.LHsSigWcType GHC.GhcPs
-    sigWcType =
-      Syntax.HsWC
-        { Syntax.hswc_ext = GHC.noExtField
-        , Syntax.hswc_body = sigTy
-        }
-  in
-    Syntax.ExprWithTySig [] (mkLocated expr) sigWcType
 
 {- | Construct a signature pattern @(pat :: ty)@.
 

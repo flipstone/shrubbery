@@ -23,7 +23,7 @@ import Text.Read (readMaybe)
 import Shrubbery
 import Shrubbery.Generic
 import Shrubbery.Parser
-import Shrubbery.Plugin (magicToTaggedUnion, magicToTaggedUnionInferType, magicDeriveTaggedInstances)
+import Shrubbery.Plugin ()
 
 main :: IO ()
 main =
@@ -49,9 +49,6 @@ main =
           , ("Tagged Union Eq instance matches derived Eq for equivalent sum type", prop_taggedUnionEqMatchesDerivedEq)
           , ("Union Ord instance matches derived Ord for equivalent sum type", prop_unionOrdMatchesDerivedOrd)
           , ("Tagged Union Ord instance matches derived Ord for equivalent sum type", prop_taggedUnionOrdMatchesDerivedOrd)
-          , ("Source plugin generates correct conversion", prop_sourcePluginConversion)
-          , ("Source plugin newtype conversion", prop_sourcePluginNewtypeConversion)
-          , ("Source plugin infer type conversion", prop_sourcePluginInferType)
           , ("Source plugin derive tagged instances", prop_sourcePluginDeriveTaggedInstances)
           ]
     ]
@@ -777,99 +774,8 @@ prop_taggedUnionOrdMatchesDerivedOrd =
 
 -- Source Plugin tests
 
-data Fruit = Apple Int | Banana String | Cherry Bool
-
-fruitToTaggedUnion :: Fruit -> TaggedUnion '["apple" @= Int, "banana" @= String, "cherry" @= Bool]
-fruitToTaggedUnion = magicToTaggedUnion
-
-prop_sourcePluginConversion :: HH.Property
-prop_sourcePluginConversion =
-  HH.property $ do
-    let
-      resultApple =
-        dissectTaggedUnion
-          ( taggedBranchBuild
-              . taggedBranch @"apple" show
-              . taggedBranch @"banana" id
-              . taggedBranch @"cherry" show
-              $ taggedBranchEnd
-          )
-          (fruitToTaggedUnion (Apple 42))
-
-      resultBanana =
-        dissectTaggedUnion
-          ( taggedBranchBuild
-              . taggedBranch @"apple" show
-              . taggedBranch @"banana" id
-              . taggedBranch @"cherry" show
-              $ taggedBranchEnd
-          )
-          (fruitToTaggedUnion (Banana "hello"))
-
-      resultCherry =
-        dissectTaggedUnion
-          ( taggedBranchBuild
-              . taggedBranch @"apple" show
-              . taggedBranch @"banana" id
-              . taggedBranch @"cherry" show
-              $ taggedBranchEnd
-          )
-          (fruitToTaggedUnion (Cherry True))
-    resultApple === "42"
-    resultBanana === "hello"
-    resultCherry === "True"
-
-newtype Wrapper = Wrapper String
-
-wrapperToTaggedUnion :: Wrapper -> TaggedUnion '["wrapped" @= String]
-wrapperToTaggedUnion = magicToTaggedUnion
-
-prop_sourcePluginNewtypeConversion :: HH.Property
-prop_sourcePluginNewtypeConversion =
-  HH.property $ do
-    let
-      result =
-        dissectTaggedUnion
-          ( taggedBranchBuild
-              . taggedBranch @"wrapped" id
-              $ taggedBranchEnd
-          )
-          (wrapperToTaggedUnion (Wrapper "test"))
-    result === "test"
-
-data Veggie = Carrot Int | Potato String
-
-veggieToTaggedUnion = magicToTaggedUnionInferType @Veggie
-
-prop_sourcePluginInferType :: HH.Property
-prop_sourcePluginInferType =
-  HH.property $ do
-    let
-      resultCarrot =
-        dissectTaggedUnion
-          ( taggedBranchBuild
-              . taggedBranch @"Carrot" show
-              . taggedBranch @"Potato" id
-              $ taggedBranchEnd
-          )
-          (veggieToTaggedUnion (Carrot 99))
-
-      resultPotato =
-        dissectTaggedUnion
-          ( taggedBranchBuild
-              . taggedBranch @"Carrot" show
-              . taggedBranch @"Potato" id
-              $ taggedBranchEnd
-          )
-          (veggieToTaggedUnion (Potato "spud"))
-    resultCarrot === "99"
-    resultPotato === "spud"
-
--- Source Plugin derive tagged instances tests
-
 data Animal = Cat Int | Dog String | Parrot Bool
-
-deriveAnimalInstances = magicDeriveTaggedInstances @Animal
+  deriving ShrubberyMagic
 
 prop_sourcePluginDeriveTaggedInstances :: HH.Property
 prop_sourcePluginDeriveTaggedInstances =
