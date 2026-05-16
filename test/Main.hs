@@ -51,6 +51,7 @@ main =
           , ("Union Ord instance matches derived Ord for equivalent sum type", prop_unionOrdMatchesDerivedOrd)
           , ("Tagged Union Ord instance matches derived Ord for equivalent sum type", prop_taggedUnionOrdMatchesDerivedOrd)
           , ("Source plugin derive tagged instances", prop_sourcePluginDeriveTaggedInstances)
+          , ("Source plugin derive tagged instances with nullary constructors", prop_sourcePluginNullaryConstructors)
           ]
     ]
 
@@ -855,3 +856,68 @@ prop_sourcePluginDeriveTaggedInstances =
       )
       rebuiltParrot
       === "True"
+
+-- Source Plugin tests: nullary constructors
+
+data TrafficLight = Red | Yellow | Green
+
+deriving instance ShrubberyMagic => TaggedUnionable TrafficLight
+
+data MixedArity = WithPayload Int | WithoutPayload
+
+deriving instance ShrubberyMagic => TaggedUnionable MixedArity
+
+prop_sourcePluginNullaryConstructors :: HH.Property
+prop_sourcePluginNullaryConstructors =
+  HH.property $ do
+    let
+      showLight :: TrafficLight -> String
+      showLight =
+        dissectTagged
+          ( taggedBranchBuild
+              . taggedBranch @"Red" (\() -> "red")
+              . taggedBranch @"Yellow" (\() -> "yellow")
+              . taggedBranch @"Green" (\() -> "green")
+              $ taggedBranchEnd
+          )
+
+    showLight Red === "red"
+    showLight Yellow === "yellow"
+    showLight Green === "green"
+
+    let
+      rebuiltRed :: TrafficLight
+      rebuiltRed = unifyTagged @"Red" ()
+
+      rebuiltYellow :: TrafficLight
+      rebuiltYellow = unifyTagged @"Yellow" ()
+
+      rebuiltGreen :: TrafficLight
+      rebuiltGreen = unifyTagged @"Green" ()
+
+    showLight rebuiltRed === "red"
+    showLight rebuiltYellow === "yellow"
+    showLight rebuiltGreen === "green"
+
+    let
+      showMixed :: MixedArity -> String
+      showMixed =
+        dissectTagged
+          ( taggedBranchBuild
+              . taggedBranch @"WithPayload" show
+              . taggedBranch @"WithoutPayload" (\() -> "none")
+              $ taggedBranchEnd
+          )
+
+    showMixed (WithPayload 42) === "42"
+    showMixed WithoutPayload === "none"
+
+    let
+      rebuiltWithPayload :: MixedArity
+      rebuiltWithPayload = unifyTagged @"WithPayload" (99 :: Int)
+
+      rebuiltWithout :: MixedArity
+      rebuiltWithout = unifyTagged @"WithoutPayload" ()
+
+    showMixed rebuiltWithPayload === "99"
+    showMixed rebuiltWithout === "none"

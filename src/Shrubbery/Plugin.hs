@@ -34,6 +34,17 @@ instance ShrubberyMagic => TaggedUnionable Fruit where
       $ taggedBranchEnd
       )
 @
+
+Nullary constructors (with no fields) are mapped to @()@:
+
+@
+data Light = On | Off
+
+deriving instance ShrubberyMagic => TaggedUnionable Light
+@
+
+generates @TaggedBranchTypes Light = \'[\"On\" \@= (), \"Off\" \@= ()]@, with dissection passing @()@
+as the value and unification wrapping the constructor in @\\() -> Con@.
 -}
 module Shrubbery.Plugin
   ( plugin
@@ -234,6 +245,7 @@ data ConstructorInfo = ConstructorInfo
   { constructorName :: String
   , constructorFieldType :: String
   , constructorFieldTypeNode :: Maybe (GHC.LHsType GHC.GhcPs)
+  , constructorIsNullary :: Bool
   }
 
 extractDataDefn :: Syntax.HsDataDefn GHC.GhcPs -> ADTDef
@@ -250,29 +262,33 @@ extractConstructor conDecl =
   case conDecl of
     Syntax.ConDeclH98 {Syntax.con_name = SrcLoc.L _ name, Syntax.con_args = args} ->
       let
-        (fieldTypeStr, fieldTypeNode) = extractConDeclH98Field args
+        (fieldTypeStr, fieldTypeNode, isNullary) = extractConDeclH98Field args
       in
         ConstructorInfo
           { constructorName = rdrNameString name
           , constructorFieldType = fieldTypeStr
           , constructorFieldTypeNode = fieldTypeNode
+          , constructorIsNullary = isNullary
           }
     Syntax.ConDeclGADT {} ->
       ConstructorInfo
         { constructorName = Compat.getGADTConName conDecl
         , constructorFieldType = "()"
         , constructorFieldTypeNode = Nothing
+        , constructorIsNullary = True
         }
 
 extractConDeclH98Field ::
   Syntax.HsConDeclH98Details GHC.GhcPs ->
-  (String, Maybe (GHC.LHsType GHC.GhcPs))
+  (String, Maybe (GHC.LHsType GHC.GhcPs), Bool)
 extractConDeclH98Field args =
   case args of
     Syntax.PrefixCon _ [GHC.HsScaled _ fieldTy] ->
-      (typeNodeToString (SrcLoc.unLoc fieldTy), Just fieldTy)
+      (typeNodeToString (SrcLoc.unLoc fieldTy), Just fieldTy, False)
+    Syntax.PrefixCon _ [] ->
+      ("()", Nothing, True)
     _ ->
-      ("()", Nothing)
+      ("()", Nothing, True)
 
 typeNodeToString :: GHC.HsType GHC.GhcPs -> String
 typeNodeToString hsType =
@@ -438,10 +454,7 @@ generateDissectionCaseAlt ::
 generateDissectionCaseAlt conInfo =
   let
     conRdrName = RdrName.mkRdrUnqual (OccName.mkDataOcc (constructorName conInfo))
-    valRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "val")
     branchesRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "shrubberyBranches")
-
-    conPat = mkConPat conRdrName [mkVarPat valRdrName]
 
     tagTypeArg = mkHsTyLitString (constructorName conInfo)
 
@@ -451,10 +464,24 @@ generateDissectionCaseAlt conInfo =
         (mkHsVar (mkMagicQual (OccName.mkVarOcc "selectBranchAtTag")))
         tagTypeArg
 
+    (conPat, valExpr) =
+      if constructorIsNullary conInfo
+        then
+          ( mkConPat conRdrName []
+          , Compat.mkUnitExpr
+          )
+        else
+          let
+            valRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "val")
+          in
+            ( mkConPat conRdrName [mkVarPat valRdrName]
+            , mkHsVar valRdrName
+            )
+
     body =
       Compat.mkHsApp
         (Compat.mkHsApp selectExpr (mkHsVar branchesRdrName))
-        (mkHsVar valRdrName)
+        valExpr
 
     grhs = Compat.mkGRHS body
     grhss = mkGRHSs [grhs]
@@ -482,10 +509,19 @@ generateTaggedBranchChain constructors =
                 Compat.mkHsAppType
                   (mkHsVar (mkMagicQual (OccName.mkVarOcc "taggedBranch")))
                   tagTypeArg
+
+              conExpr =
+                if constructorIsNullary conInfo
+                  then
+                    Compat.mkLamExpr
+                      Compat.mkUnitPat
+                      (mkHsVar (RdrName.mkRdrUnqual (OccName.mkDataOcc (constructorName conInfo))))
+                  else
+                    mkHsVar (RdrName.mkRdrUnqual (OccName.mkDataOcc (constructorName conInfo)))
             in
               Compat.mkHsApp
                 taggedBranchExpr
-                (mkHsVar (RdrName.mkRdrUnqual (OccName.mkDataOcc (constructorName conInfo))))
+                conExpr
         )
         constructors
 
@@ -582,9 +618,12 @@ mkTagEntry conInfo =
     tagTy = Compat.mkLocated (Compat.mkHsTyLit (constructorName conInfo))
 
     fieldTy :: GHC.LHsType GHC.GhcPs
-    fieldTy = case constructorFieldTypeNode conInfo of
-      Just ty -> ty
-      Nothing -> mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTcOcc (constructorFieldType conInfo)))
+    fieldTy =
+      if constructorIsNullary conInfo
+        then Compat.mkUnitTy
+        else case constructorFieldTypeNode conInfo of
+          Just ty -> ty
+          Nothing -> mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTcOcc (constructorFieldType conInfo)))
 
     opName :: GHC.LIdP GHC.GhcPs
     opName = Compat.mkLocated (mkMagicQual (OccName.mkTcOcc "@="))

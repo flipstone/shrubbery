@@ -35,6 +35,10 @@ module Shrubbery.GHCCompat
   , mkFamEqnPats
   , mkClsInstDeclExt
   , mkSigPat
+  , mkUnitTy
+  , mkUnitExpr
+  , mkUnitPat
+  , mkLamExpr
   , noAnnEpAnn
   , wrapParsedResultAction
   ) where
@@ -519,4 +523,69 @@ mkSigPat pat ty =
     Syntax.SigPat [] pat patSigType
 #else
     Syntax.SigPat Ann.noAnn pat patSigType
+#endif
+
+{- | Construct the unit type @()@ as an AST node. Uses 'HsTupleTy' with an empty field list,
+  which GHC resolves without requiring any imports (unlike an unqualified @()@ type constructor
+  reference, which is not in scope under @NoImplicitPrelude@).
+
+@since 0.2.5.0
+-}
+mkUnitTy :: GHC.LHsType GHC.GhcPs
+mkUnitTy =
+  mkLocated (Syntax.HsTupleTy Ann.noAnn Syntax.HsBoxedOrConstraintTuple [])
+
+{- | Construct the unit value expression @()@ as an AST node. Uses 'ExplicitTuple' with an
+  empty field list, which GHC resolves without requiring any imports.
+
+@since 0.2.5.0
+-}
+mkUnitExpr :: GHC.LHsExpr GHC.GhcPs
+mkUnitExpr =
+  mkLocated (Syntax.ExplicitTuple Ann.noAnn [] BasicTypes.Boxed)
+
+{- | Construct the unit pattern @()@ as an AST node. Uses 'TuplePat' with an empty field
+  list, which GHC resolves without requiring any imports.
+
+@since 0.2.5.0
+-}
+mkUnitPat :: GHC.LPat GHC.GhcPs
+mkUnitPat =
+  mkLocated (Syntax.TuplePat Ann.noAnn [] BasicTypes.Boxed)
+
+{- | Construct a lambda expression @\\pat -> body@.
+
+@since 0.2.5.0
+-}
+mkLamExpr ::
+  GHC.LPat GHC.GhcPs ->
+  GHC.LHsExpr GHC.GhcPs ->
+  GHC.LHsExpr GHC.GhcPs
+mkLamExpr pat body =
+  let
+    grhs = mkGRHS body
+    grhss =
+      Syntax.GRHSs
+        { Syntax.grhssExt = GHC.emptyComments
+        , Syntax.grhssGRHSs = [grhs]
+        , Syntax.grhssLocalBinds = Syntax.EmptyLocalBinds GHC.noExtField
+        }
+    match =
+      mkLocated
+        Syntax.Match
+          { Syntax.m_ext = Ann.noAnn
+#if MIN_VERSION_ghc(9,10,0)
+          , Syntax.m_ctxt = Syntax.LamAlt Syntax.LamSingle
+#else
+          , Syntax.m_ctxt = Syntax.LambdaExpr
+#endif
+          , Syntax.m_pats = [pat]
+          , Syntax.m_grhss = grhss
+          }
+    mg = mkMatchGroup (mkLocated [match])
+  in
+#if MIN_VERSION_ghc(9,10,0)
+    mkLocated (Syntax.HsLam Ann.noAnn Syntax.LamSingle mg)
+#else
+    mkLocated (Syntax.HsLam GHC.noExtField mg)
 #endif
