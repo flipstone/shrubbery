@@ -23,7 +23,7 @@ module Shrubbery.GHCCompat
   , setModuleDecls
   , getModuleImports
   , setModuleImports
-  , filterImportDeclIEs
+  , mkQualifiedImportDecl
   , getDataDefnCons
   , getGADTConName
   , mkHsTyLit
@@ -41,9 +41,9 @@ module Shrubbery.GHCCompat
 
 #if !MIN_VERSION_ghc(9,6,0)
 import GHC.Core.DataCon qualified as DataCon
+import GHC.Unit.Types qualified as UnitTypes
 #endif
 
-import Data.Maybe qualified as Maybe
 import GHC.Data.FastString qualified as FS
 import GHC.Driver.Plugins qualified as Plugins
 import GHC.Hs qualified as GHC
@@ -61,6 +61,8 @@ import GHC.Driver.Env.Types qualified as HscTypes
 import GHC.Parser.Errors.Ppr ()
 import GHC.Parser.Errors.Types qualified as PsErrors
 import GHC.Types.Error qualified as Error
+import GHC.Types.PkgQual qualified as PkgQual
+import GHC.Unit.Module qualified as Module
 import GHC.Unit.Module.ModSummary qualified as ModSummary
 import GHC.Utils.Error qualified as ErrUtils
 
@@ -143,22 +145,18 @@ mkHsAppType fun tyArg =
 
 {- | Wrap a declaration-processing function into a full 'parsedResultAction' handler.
 
-  After successful declaration processing, any import list entries whose names appear in the
-  given strip list are removed. If an import's explicit list becomes empty, the entire import
-  is dropped.
-
-  Errors are added to 'PsMessages' and returned to GHC.
+  The callback receives the module's declarations and returns a list of import declarations to
+  add and the new list of declarations. Errors are added to 'PsMessages' and returned to GHC.
 
 @since 0.2.3.2
 -}
 wrapParsedResultAction ::
-  [String] ->
-  ([GHC.LHsDecl GHC.GhcPs] -> Either (SrcLoc.SrcSpan, String) [GHC.LHsDecl GHC.GhcPs]) ->
+  ([GHC.LHsDecl GHC.GhcPs] -> Either (SrcLoc.SrcSpan, String) ([GHC.LImportDecl GHC.GhcPs], [GHC.LHsDecl GHC.GhcPs])) ->
   [Plugins.CommandLineOption] ->
   ModSummary.ModSummary ->
   Plugins.ParsedResult ->
   HscTypes.Hsc Plugins.ParsedResult
-wrapParsedResultAction namesToStrip processDecls _opts _modSummary parsedResult =
+wrapParsedResultAction processDecls _opts _modSummary parsedResult =
   let
     hpm = Plugins.parsedResultModule parsedResult
   in
@@ -182,11 +180,11 @@ wrapParsedResultAction namesToStrip processDecls _opts _modSummary parsedResult 
                   parsedResult
                     { Plugins.parsedResultMessages = newMessages
                     }
-            Right newDecls ->
+            Right (newImports, newDecls) ->
               let
-                strippedImports = stripImports namesToStrip (getModuleImports hsModule)
+                existingImports = getModuleImports hsModule
                 newModule =
-                  setModuleImports strippedImports
+                  setModuleImports (existingImports ++ newImports)
                     . setModuleDecls newDecls
                     $ hsModule
                 newHpm = hpm {GHC.hpm_module = SrcLoc.L locMod newModule}
@@ -296,64 +294,47 @@ setModuleImports :: [GHC.LImportDecl GHC.GhcPs] -> GHC.HsModule -> GHC.HsModule
 setModuleImports newImports hsModule = hsModule {GHC.hsmodImports = newImports}
 #endif
 
--- | Strip the given names from all import declarations. If an import's explicit list
---   becomes empty after stripping, the entire import is removed.
-stripImports :: [String] -> [GHC.LImportDecl GHC.GhcPs] -> [GHC.LImportDecl GHC.GhcPs]
-stripImports namesToStrip = Maybe.mapMaybe (filterImportDeclIEs namesToStrip)
+{- | Create a qualified import declaration: @import qualified ModuleName as Qualifier@.
 
-{- | Filter import entries from an import declaration, removing any 'IEVar' whose name
-  appears in the given list. Returns 'Nothing' if the explicit import list becomes empty.
-  Import declarations without an explicit import list are returned unchanged.
+  The import is marked implicit ('ideclImplicit = True') so that GHC's unused-import
+  checker does not flag it as redundant. GHC does not track usage from plugin-generated
+  code when determining whether an import is used, so without this flag the injected
+  imports would always be reported as redundant despite being required.
 
-@since 0.2.3.2
+@since 0.2.5.0
 -}
-filterImportDeclIEs :: [String] -> GHC.LImportDecl GHC.GhcPs -> Maybe (GHC.LImportDecl GHC.GhcPs)
-filterImportDeclIEs namesToStrip (SrcLoc.L loc decl) =
-  case decl of
+mkQualifiedImportDecl :: String -> String -> GHC.LImportDecl GHC.GhcPs
+mkQualifiedImportDecl modName qualifier =
+  mkLocated
 #if MIN_VERSION_ghc(9,6,0)
-    Syntax.ImportDecl {Syntax.ideclImportList = Just (Syntax.Exactly, SrcLoc.L listLoc items)} ->
-      let
-        filtered = filter (not . ieVarNameIn namesToStrip) items
-      in
-        if null filtered
-          then Nothing
-          else Just (SrcLoc.L loc (decl {Syntax.ideclImportList = Just (Syntax.Exactly, SrcLoc.L listLoc filtered)}))
+      Syntax.ImportDecl
+        { Syntax.ideclExt =
+            GHC.XImportDeclPass
+              { GHC.ideclAnn = Ann.noAnn
+              , GHC.ideclSourceText = SourceText.NoSourceText
+              , GHC.ideclImplicit = True
+              }
+        , Syntax.ideclName = mkLocated (Module.mkModuleName modName)
+        , Syntax.ideclPkgQual = PkgQual.NoRawPkgQual
+        , Syntax.ideclSource = Syntax.NotBoot
+        , Syntax.ideclSafe = False
+        , Syntax.ideclQualified = Syntax.QualifiedPre
+        , Syntax.ideclAs = Just (mkLocated (Module.mkModuleName qualifier))
+        , Syntax.ideclImportList = Nothing
+        }
 #else
-    GHC.ImportDecl {GHC.ideclHiding = Just (False, SrcLoc.L listLoc items)} ->
-      let
-        filtered = filter (not . ieVarNameIn namesToStrip) items
-      in
-        if null filtered
-          then Nothing
-          else Just (SrcLoc.L loc (decl {GHC.ideclHiding = Just (False, SrcLoc.L listLoc filtered)}))
-#endif
-    _ -> Just (SrcLoc.L loc decl)
-
--- | Check if an IE item is an 'IEVar' whose name is in the given list.
-ieVarNameIn :: [String] -> GHC.LIE GHC.GhcPs -> Bool
-ieVarNameIn names (SrcLoc.L _ ie) =
-  case ie of
-#if MIN_VERSION_ghc(9,10,0)
-    GHC.IEVar _ wrappedName _ -> ieWrappedNameIn names wrappedName
-#else
-    GHC.IEVar _ wrappedName -> ieWrappedNameIn names wrappedName
-#endif
-    _ -> False
-
-#if MIN_VERSION_ghc(9,6,0)
-ieWrappedNameIn :: [String] -> GHC.LIEWrappedName GHC.GhcPs -> Bool
-ieWrappedNameIn names (SrcLoc.L _ wrappedName) =
-  case wrappedName of
-    Syntax.IEName _ (SrcLoc.L _ name) ->
-      OccName.occNameString (RdrName.rdrNameOcc name) `elem` names
-    _ -> False
-#else
-ieWrappedNameIn :: [String] -> GHC.LIEWrappedName RdrName.RdrName -> Bool
-ieWrappedNameIn names (SrcLoc.L _ wrappedName) =
-  case wrappedName of
-    GHC.IEName (SrcLoc.L _ name) ->
-      OccName.occNameString (RdrName.rdrNameOcc name) `elem` names
-    _ -> False
+      GHC.ImportDecl
+        { GHC.ideclExt = Ann.noAnn
+        , GHC.ideclSourceSrc = SourceText.NoSourceText
+        , GHC.ideclName = mkLocated (Module.mkModuleName modName)
+        , GHC.ideclPkgQual = PkgQual.NoRawPkgQual
+        , GHC.ideclSource = UnitTypes.NotBoot
+        , GHC.ideclSafe = False
+        , GHC.ideclQualified = GHC.QualifiedPre
+        , GHC.ideclImplicit = True
+        , GHC.ideclAs = Just (mkLocated (Module.mkModuleName qualifier))
+        , GHC.ideclHiding = Nothing
+        }
 #endif
 
 {- | Extract the list of constructors from an 'HsDataDefn', abstracting over the

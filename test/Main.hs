@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -23,7 +24,7 @@ import Text.Read (readMaybe)
 import Shrubbery
 import Shrubbery.Generic
 import Shrubbery.Parser
-import Shrubbery.Plugin ()
+import Shrubbery.Plugin (ShrubberyMagic (..))
 
 main :: IO ()
 main =
@@ -775,7 +776,8 @@ prop_taggedUnionOrdMatchesDerivedOrd =
 -- Source Plugin tests
 
 data Animal = Cat Int | Dog String | Parrot Bool
-  deriving (ShrubberyMagic)
+
+deriving instance ShrubberyMagic => TaggedUnionable Animal
 
 prop_sourcePluginDeriveTaggedInstances :: HH.Property
 prop_sourcePluginDeriveTaggedInstances =
