@@ -4,9 +4,8 @@
 Copyright : Flipstone Technology Partners 2021-2025
 License   : BSD3
 
-This module provides a GHC source plugin that generates 'Shrubbery.Classes.TaggedBranchTypes',
-'Shrubbery.Classes.TaggedDissection', and 'Shrubbery.Classes.TaggedUnification' instances for
-user-defined ADTs.
+This module provides a GHC source plugin that generates 'Shrubbery.Classes.TaggedUnionable'
+instances for user-defined ADTs.
 
 To use the plugin, add @-fplugin Shrubbery.Plugin@ to your GHC options, then add a
 @deriving ShrubberyMagic@ clause to your data type:
@@ -19,13 +18,12 @@ data Fruit = Apple Int | Banana String
 The plugin generates the equivalent of:
 
 @
-type instance TaggedBranchTypes Fruit = \'[\"Apple\" \@= Int, \"Banana\" \@= String]
-instance TaggedDissection Fruit where
+instance TaggedUnionable Fruit where
+  type TaggedBranchTypes Fruit = \'[\"Apple\" \@= Int, \"Banana\" \@= String]
   dissectTagged branches fruit =
     case fruit of
       Apple val -> selectBranchAtTag \@\"Apple\" branches val
       Banana val -> selectBranchAtTag \@\"Banana\" branches val
-instance TaggedUnification Fruit where
   unifyTaggedWithTag (_ :: proxy tag) =
     selectBranchAtTag \@tag
       ( taggedBranchBuild
@@ -104,11 +102,9 @@ processDecl lDecl@(SrcLoc.L loc decl) =
                   strippedDecl = SrcLoc.L loc (Syntax.TyClD xTyCl (tyClDecl {Syntax.tcdDataDefn = strippedDataDefn}))
                   adtDef = extractDataDefn dataDefn
                   constructors = adtDefConstructors adtDef
-                  tyFamInst = generateTaggedBranchTypesDecl adtName constructors
-                  dissectionInst = generateDissectionInstDecl adtName constructors
-                  unificationInst = generateUnificationInstDecl adtName constructors
+                  unionableInst = generateTaggedUnionableInstDecl adtName constructors
                 in
-                  [strippedDecl, tyFamInst, dissectionInst, unificationInst]
+                  [strippedDecl, unionableInst]
         _ ->
           [lDecl]
     _ ->
@@ -218,12 +214,49 @@ typeNodeToString hsType =
 
 -- | Instance generation
 
--- | Generate: @type instance TaggedBranchTypes ADT = '[\"Con1\" \@= Type1, ...]@
-generateTaggedBranchTypesDecl ::
+{- | Generate:
+
+  @
+    instance TaggedUnionable ADT where
+      type TaggedBranchTypes ADT = '[\"Con1\" \@= Type1, ...]
+      dissectTagged shrubberyBranches shrubberyArg =
+        case shrubberyArg of
+          Con1 val -> selectBranchAtTag \@"Con1" shrubberyBranches val
+          Con2 val -> selectBranchAtTag \@"Con2" shrubberyBranches val
+      unifyTaggedWithTag _ =
+        selectBranchAtTag \@tag
+          ( taggedBranchBuild
+            $ taggedBranch \@"Con1" Con1
+            $ taggedBranch \@"Con2" Con2
+            $ taggedBranchEnd
+          )
+  @
+-}
+generateTaggedUnionableInstDecl ::
   String ->
   [ConstructorInfo] ->
   GHC.LHsDecl GHC.GhcPs
-generateTaggedBranchTypesDecl adtName constructors =
+generateTaggedUnionableInstDecl adtName constructors =
+  let
+    instHead = mkClassInstHead "TaggedUnionable" adtName
+
+    -- Associated type family: type TaggedBranchTypes ADT = '[...]
+    tyFamInst = generateTaggedBranchTypesFamInst adtName constructors
+
+    -- dissectTagged method
+    dissectionBind = generateDissectionBind constructors
+
+    -- unifyTaggedWithTag method
+    unificationBind = generateUnificationBind constructors
+  in
+    mkClsInstDeclWithTyFam instHead [tyFamInst] [Compat.mkLocated dissectionBind, Compat.mkLocated unificationBind]
+
+-- | Generate the associated type instance: @type TaggedBranchTypes ADT = '[\"Con1\" \@= Type1, ...]@
+generateTaggedBranchTypesFamInst ::
+  String ->
+  [ConstructorInfo] ->
+  Syntax.TyFamInstDecl GHC.GhcPs
+generateTaggedBranchTypesFamInst adtName constructors =
   let
     tagEntries :: [GHC.LHsType GHC.GhcPs]
     tagEntries = fmap mkTagEntry constructors
@@ -247,38 +280,25 @@ generateTaggedBranchTypesDecl adtName constructors =
         , Syntax.feqn_fixity = Fixity.Prefix
         , Syntax.feqn_rhs = tagListTy
         }
-
-    tyFamInstDecl :: Syntax.TyFamInstDecl GHC.GhcPs
-    tyFamInstDecl =
-      Syntax.TyFamInstDecl
-        { Syntax.tfid_xtn = Compat.noAnnEpAnn
-        , Syntax.tfid_eqn = famEqn
-        }
-
-    instDecl :: Syntax.InstDecl GHC.GhcPs
-    instDecl =
-      Syntax.TyFamInstD
-        { Syntax.tfid_ext = GHC.noExtField
-        , Syntax.tfid_inst = tyFamInstDecl
-        }
   in
-    Compat.mkLocated (Syntax.InstD GHC.noExtField instDecl)
+    Syntax.TyFamInstDecl
+      { Syntax.tfid_xtn = Compat.noAnnEpAnn
+      , Syntax.tfid_eqn = famEqn
+      }
 
-{- | Generate:
+{- | Generate the dissectTagged method binding:
 
   @
-    instance TaggedDissection ADT where
-      dissectTagged shrubberyBranches shrubberyArg =
-        case shrubberyArg of
-          Con1 val -> selectBranchAtTag \@"Con1" shrubberyBranches val
-          Con2 val -> selectBranchAtTag \@"Con2" shrubberyBranches val
+    dissectTagged shrubberyBranches shrubberyArg =
+      case shrubberyArg of
+        Con1 val -> selectBranchAtTag \@"Con1" shrubberyBranches val
+        Con2 val -> selectBranchAtTag \@"Con2" shrubberyBranches val
   @
 -}
-generateDissectionInstDecl ::
-  String ->
+generateDissectionBind ::
   [ConstructorInfo] ->
-  GHC.LHsDecl GHC.GhcPs
-generateDissectionInstDecl adtName constructors =
+  GHC.HsBind GHC.GhcPs
+generateDissectionBind constructors =
   let
     branchesRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "shrubberyBranches")
     argRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "shrubberyArg")
@@ -294,17 +314,52 @@ generateDissectionInstDecl adtName constructors =
         methodRdrName
         [mkVarPat branchesRdrName, mkVarPat argRdrName]
         caseExpr
-
-    methodBind = Compat.mkFunBind (Compat.mkLocated methodRdrName) matchGroup
-
-    instHead = mkClassInstHead "TaggedDissection" adtName
   in
-    mkClsInstDecl instHead [Compat.mkLocated methodBind]
+    Compat.mkFunBind (Compat.mkLocated methodRdrName) matchGroup
 
-{- | Generate a single case alternative for TaggedDissection:
+{- | Generate the unifyTaggedWithTag method binding:
 
-  @Con val -> selectBranchAtTag \@"Con" branches val@
+  @
+    unifyTaggedWithTag _ =
+      selectBranchAtTag \@tag
+        ( taggedBranchBuild
+          $ taggedBranch \@"Con1" Con1
+          $ taggedBranch \@"Con2" Con2
+          $ taggedBranchEnd
+        )
+  @
 -}
+generateUnificationBind ::
+  [ConstructorInfo] ->
+  GHC.HsBind GHC.GhcPs
+generateUnificationBind constructors =
+  let
+    methodRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "unifyTaggedWithTag")
+
+    -- (_ :: proxy tag) pattern to bring 'tag' into scope
+    proxyPat = mkTypedWildPat "proxy" "tag"
+
+    -- selectBranchAtTag @tag (taggedBranchBuild $ taggedBranch @"Con1" Con1 $ ... $ taggedBranchEnd)
+    tagTyVar = mkHsWcTyVar "tag"
+    selectExpr =
+      Compat.mkHsAppType
+        (mkHsVar (RdrName.mkRdrUnqual (OccName.mkVarOcc "selectBranchAtTag")))
+        tagTyVar
+
+    branchChain = generateTaggedBranchChain constructors
+
+    body =
+      Compat.mkHsApp
+        selectExpr
+        (mkHsPar branchChain)
+
+    matchGroup =
+      mkSingleMatchGroup
+        methodRdrName
+        [proxyPat]
+        body
+  in
+    Compat.mkFunBind (Compat.mkLocated methodRdrName) matchGroup
 generateDissectionCaseAlt ::
   ConstructorInfo ->
   GHC.LMatch GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
@@ -339,56 +394,6 @@ generateDissectionCaseAlt conInfo =
         , Syntax.m_pats = [conPat]
         , Syntax.m_grhss = grhss
         }
-
-{- | Generate:
-
-  @
-    instance TaggedUnification ADT where
-      unifyTaggedWithTag _ =
-        selectBranchAtTag \@tag
-          ( taggedBranchBuild
-            $ taggedBranch \@"Con1" Con1
-            $ taggedBranch \@"Con2" Con2
-            $ taggedBranchEnd
-          )
-  @
--}
-generateUnificationInstDecl ::
-  String ->
-  [ConstructorInfo] ->
-  GHC.LHsDecl GHC.GhcPs
-generateUnificationInstDecl adtName constructors =
-  let
-    methodRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "unifyTaggedWithTag")
-
-    -- (_ :: proxy tag) pattern to bring 'tag' into scope
-    proxyPat = mkTypedWildPat "proxy" "tag"
-
-    -- selectBranchAtTag @tag (taggedBranchBuild $ taggedBranch @"Con1" Con1 $ ... $ taggedBranchEnd)
-    tagTyVar = mkHsWcTyVar "tag"
-    selectExpr =
-      Compat.mkHsAppType
-        (mkHsVar (RdrName.mkRdrUnqual (OccName.mkVarOcc "selectBranchAtTag")))
-        tagTyVar
-
-    branchChain = generateTaggedBranchChain constructors
-
-    body =
-      Compat.mkHsApp
-        selectExpr
-        (mkHsPar branchChain)
-
-    matchGroup =
-      mkSingleMatchGroup
-        methodRdrName
-        [proxyPat]
-        body
-
-    methodBind = Compat.mkFunBind (Compat.mkLocated methodRdrName) matchGroup
-
-    instHead = mkClassInstHead "TaggedUnification" adtName
-  in
-    mkClsInstDecl instHead [Compat.mkLocated methodBind]
 
 -- | Generate @taggedBranchBuild $ taggedBranch \@"Con1" Con1 $ taggedBranch \@"Con2" Con2 $ ... $ taggedBranchEnd@
 generateTaggedBranchChain :: [ConstructorInfo] -> GHC.LHsExpr GHC.GhcPs
@@ -442,12 +447,13 @@ mkClassInstHead className adtName =
         , Syntax.sig_body = appTy
         }
 
--- | Create a class instance declaration.
-mkClsInstDecl ::
+-- | Create a class instance declaration with associated type family instances.
+mkClsInstDeclWithTyFam ::
   GHC.LHsSigType GHC.GhcPs ->
+  [Syntax.TyFamInstDecl GHC.GhcPs] ->
   [GHC.LHsBind GHC.GhcPs] ->
   GHC.LHsDecl GHC.GhcPs
-mkClsInstDecl instHead binds =
+mkClsInstDeclWithTyFam instHead tyFamInsts binds =
   let
     clsInstDecl =
       Syntax.ClsInstDecl
@@ -455,7 +461,7 @@ mkClsInstDecl instHead binds =
         , Syntax.cid_poly_ty = instHead
         , Syntax.cid_binds = Bag.listToBag binds
         , Syntax.cid_sigs = []
-        , Syntax.cid_tyfam_insts = []
+        , Syntax.cid_tyfam_insts = fmap Compat.mkLocated tyFamInsts
         , Syntax.cid_datafam_insts = []
         , Syntax.cid_overlap_mode = Nothing
         }

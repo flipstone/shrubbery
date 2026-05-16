@@ -50,9 +50,7 @@ module Shrubbery.Classes
   , Dissection (..)
   , Unification (..)
   , unify
-  , TaggedBranchTypes
-  , TaggedDissection (..)
-  , TaggedUnification (..)
+  , TaggedUnionable (..)
   , unifyTagged
   , ShowBranches
   , showsPrecViaDissect
@@ -129,68 +127,54 @@ unify ::
 unify =
   unifyWithIndex firstIndexOfType
 
-{- | This type family is used by both 'TaggedDissection' and 'TaggedUnification' to specify the
-  tagged types of the values available in the branching type. If you provide instances of
-  'TaggedDissection' or 'TaggedUnification', you'll need to provide an instance of this type family
-  as well.
+{- | 'TaggedUnionable' combines tagged dissection, unification, and branch-type declaration into a
+  single class. Any type that can present a tagged-union-like interface should implement this class.
+
+  The associated type 'TaggedBranchTypes' specifies the tagged types of the values available in the
+  branching type.
 
   Example:
 
   @
     data Fruit = Apple Int | Banana String
 
-    type instance TaggedBranchTypes Fruit = '["Apple" \@= Int, "Banana" \@= String]
-  @
+    instance TaggedUnionable Fruit where
+      type TaggedBranchTypes Fruit = \'["Apple" \@= Int, "Banana" \@= String]
 
-@since 0.2.4.0
--}
-type family TaggedBranchTypes a :: [Tag]
-
-{- | A 'TaggedDissection' provides a way to "dissect" a sum type via case analysis using
-  'TaggedBranches'. This is the tagged analogue of 'Dissection'.
-
-  Example:
-
-  @
-    instance TaggedDissection Fruit where
       dissectTagged branches fruit =
         case fruit of
-          Apple val -> selectTaggedBranchAtIndex index0 branches val
-          Banana val -> selectTaggedBranchAtIndex index1 branches val
+          Apple val -> selectBranchAtTag \@"Apple" branches val
+          Banana val -> selectBranchAtTag \@"Banana" branches val
+
+      unifyTaggedWithTag _ =
+        selectBranchAtTag \@tag
+          ( taggedBranchBuild
+          $ taggedBranch \@"Apple" Apple
+          $ taggedBranch \@"Banana" Banana
+          $ taggedBranchEnd
+          )
   @
 
-@since 0.2.4.0
+@since 0.2.5.0
 -}
-class TaggedDissection a where
+class TaggedUnionable a where
+  {- | Specifies the tagged types of the values available in the branching type.
+
+  @since 0.2.5.0
+  -}
+  type TaggedBranchTypes a :: [Tag]
+
   {- | Implementations of this must call the appropriate function in the given branches depending on
    the construction of the value @a@.
 
-  @since 0.2.4.0
+  @since 0.2.5.0
   -}
   dissectTagged :: TaggedBranches (TaggedBranchTypes a) result -> a -> result
 
-{- | A 'TaggedUnification' provides a means to construct a sum type by embedding a member, selected
-  by its tag symbol. This is the tagged analogue of 'Unification'.
-
-  Example:
-
-  @
-    instance TaggedUnification Fruit where
-      unifyTaggedWithTag _ =
-        selectBranchAtIndex (indexOfTypeAt (Proxy :: Proxy n))
-          $ branchBuild
-          $ branch Apple
-          $ branch Banana
-          $ branchEnd
-  @
-
-@since 0.2.4.0
--}
-class TaggedUnification a where
   {- | Constructs a value of type @a@ by embedding a member selected by the given tag symbol.
    The tag must be supplied via a proxy value or @TypeApplications@.
 
-  @since 0.2.4.0
+  @since 0.2.5.0
   -}
   unifyTaggedWithTag ::
     forall (tag :: Symbol) typ n proxy.
@@ -215,7 +199,7 @@ class TaggedUnification a where
 -}
 unifyTagged ::
   forall (tag :: Symbol) a typ n.
-  ( TaggedUnification a
+  ( TaggedUnionable a
   , TagType tag (TaggedBranchTypes a) ~ typ
   , KnownNat n
   , TagIndex tag (TaggedBranchTypes a) ~ n

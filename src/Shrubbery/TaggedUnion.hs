@@ -39,7 +39,7 @@ import GHC.TypeLits (KnownNat, Symbol)
 
 import Data.Type.Equality ((:~:) (..))
 import Shrubbery.BranchIndex (indexOfTypeAt, testBranchIndexEquality)
-import Shrubbery.Classes (EqBranches, NFDataBranches, OrdBranches, ShowBranches, TaggedBranchTypes, TaggedDissection (..), TaggedUnification (..), unifyWithIndex)
+import Shrubbery.Classes (EqBranches, NFDataBranches, OrdBranches, ShowBranches, TaggedUnionable (..), unifyWithIndex)
 import Shrubbery.TaggedBranches (TaggedBranchBuilder, TaggedBranches (TaggedBranches), appendTaggedBranches, selectBranchAtTag, selectTaggedBranchAtIndex, taggedBranch, taggedBranchBuild, taggedBranchDefault, taggedBranchEnd, taggedBranchSet, taggedSingleBranch)
 import Shrubbery.TypeList (KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex)
 import Shrubbery.Union (Union (Union), dissectUnion)
@@ -105,25 +105,14 @@ instance
 
 {- |
 
-@since 0.2.4.0
--}
-type instance TaggedBranchTypes (TaggedUnion taggedTypes) = taggedTypes
-
-{- |
-
-@since 0.2.4.0
--}
-instance TaggedDissection (TaggedUnion taggedTypes) where
-  dissectTagged = dissectTaggedUnion
-
-{- |
-
-@since 0.2.4.0
+@since 0.2.5.0
 -}
 instance
   KnownLength (TaggedTypes taggedTypes) =>
-  TaggedUnification (TaggedUnion taggedTypes)
+  TaggedUnionable (TaggedUnion taggedTypes)
   where
+  type TaggedBranchTypes (TaggedUnion taggedTypes) = taggedTypes
+  dissectTagged = dissectTaggedUnion
   unifyTaggedWithTag (_ :: proxy tag) =
     unifyTaggedUnion @tag
 
