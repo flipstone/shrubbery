@@ -9,16 +9,18 @@ License   : BSD3
 Compatibility shim for GHC API differences across versions. This module isolates all CPP
 conditionals so that the rest of the plugin code can be version-agnostic.
 
+Rather than constructing the generated instance as GHC AST nodes by hand (which requires
+tracking the AST's shape across every GHC release), the plugin renders the instance as Haskell
+/source text/ and feeds it to GHC's own parser via 'parseInstanceDecls'. The parser produces
+whatever AST shape the running compiler expects, so this module only has to abstract over a small,
+stable surface: invoking the parser, reading data declarations, and splicing decls/imports into
+the parsed module.
+
 @since 0.2.3.2
 -}
 module Shrubbery.GHCCompat
-  ( mkLocated
-  , mkHsApp
-  , mkHsAppType
-  , noSrcStrict
-  , notPromoted
-  , isPromoted
-  , mkMatchGroup
+  ( parseInstanceDecls
+  , showHsType
   , getModuleDecls
   , setModuleDecls
   , getModuleImports
@@ -26,40 +28,29 @@ module Shrubbery.GHCCompat
   , mkQualifiedImportDecl
   , getDataDefnCons
   , getGADTConName
-  , mkHsTyLit
-  , mkFunBind
-  , mkHsOpTy
-  , mkGRHS
-  , mkHsPar
-  , mkHsCase
-  , mkFamEqnPats
-  , mkClsInstDeclExt
-  , mkSigPat
-  , mkUnitTy
-  , mkUnitExpr
-  , mkUnitPat
-  , mkLamExpr
-  , noAnnEpAnn
   , wrapParsedResultAction
   ) where
 
 #if !MIN_VERSION_ghc(9,6,0)
-import GHC.Core.DataCon qualified as DataCon
 import GHC.Unit.Types qualified as UnitTypes
 #endif
 
 import GHC.Data.FastString qualified as FS
+import GHC.Data.StringBuffer qualified as StringBuffer
+import GHC.Driver.Config.Parser qualified as ParserConfig
 import GHC.Driver.Plugins qualified as Plugins
+import GHC.Driver.Session qualified as Session
 import GHC.Hs qualified as GHC
+import GHC.LanguageExtensions qualified as LangExt
+import GHC.Parser qualified as Parser
 import GHC.Parser.Annotation qualified as Ann
+import GHC.Parser.Lexer qualified as Lexer
 import GHC.Types.Name.Occurrence qualified as OccName
 import GHC.Types.Name.Reader qualified as RdrName
 import GHC.Types.SrcLoc qualified as SrcLoc
 import GHC.Types.SourceText qualified as SourceText
 import GHC.Utils.Outputable qualified as Outputable
 import Language.Haskell.Syntax qualified as Syntax
-
-import GHC.Types.Basic qualified as BasicTypes
 
 import GHC.Driver.Env.Types qualified as HscTypes
 import GHC.Parser.Errors.Ppr ()
@@ -72,96 +63,77 @@ import GHC.Utils.Error qualified as ErrUtils
 
 #if MIN_VERSION_ghc(9,6,0)
 import Data.List.NonEmpty qualified as NEL
-import Language.Haskell.Syntax.Basic qualified as SyntaxBasic
 #endif
 
-{- | Wrap a value with an empty source location annotation.
+{- | Parse a fragment of Haskell module source into a list of declarations using GHC's own
+  parser. The source is expected to be a complete module (with a header), as produced by the
+  plugin's instance renderer; only its declarations are returned.
 
-@since 0.2.3.2
+  The extensions required by the generated code ('TypeApplications', 'DataKinds', etc.) are
+  force-enabled in the parser options so that parsing does not depend on which extensions the
+  user's module happens to have turned on. The user's module must still enable whatever is needed
+  for the spliced instance to /type-check/, but that was already true before this plugin parsed
+  anything.
+
+@since 0.2.5.0
 -}
-#if MIN_VERSION_ghc(9,10,0)
-mkLocated :: Ann.HasAnnotation ann => a -> SrcLoc.GenLocated ann a
-mkLocated = SrcLoc.L Ann.noSrcSpanA
-#else
-mkLocated :: a -> SrcLoc.GenLocated (Ann.SrcAnn ann) a
-mkLocated = SrcLoc.L Ann.noSrcSpanA
-#endif
+parseInstanceDecls :: Session.DynFlags -> String -> Either String [GHC.LHsDecl GHC.GhcPs]
+parseInstanceDecls dflags src =
+  let
+    parserOpts = ParserConfig.initParserOpts (enableGeneratedExtensions dflags)
+    buffer = StringBuffer.stringToStringBuffer src
+    startLoc = SrcLoc.mkRealSrcLoc (FS.mkFastString "<shrubbery-plugin-generated>") 1 1
+    parseState = Lexer.initParserState parserOpts buffer startLoc
+  in
+    case Lexer.unP Parser.parseModule parseState of
+      Lexer.POk _ (SrcLoc.L _ hsModule) ->
+        Right (getModuleDecls hsModule)
+      Lexer.PFailed _ ->
+        Left "Shrubbery.Plugin: internal error - failed to parse generated instance source"
 
-{- | Construct a 'Syntax.MatchGroup' with the appropriate extension field for the GHC version.
+{- | The language extensions the generated instance source relies on, force-enabled for parsing.
 
-  In GHC 9.6+, 'Syntax.MG' carries an 'Origin' value; in earlier versions, the extension is
-  'NoExtField'.
-
-@since 0.2.3.2
+@since 0.2.5.0
 -}
-mkMatchGroup ::
-  GHC.XRec GHC.GhcPs [GHC.LMatch GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)] ->
-  Syntax.MatchGroup GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
-mkMatchGroup alts =
-  Syntax.MG
-#if MIN_VERSION_ghc(9,6,0)
-    { Syntax.mg_ext = mgExtField
-    , Syntax.mg_alts = alts
-    }
-#else
-    { Syntax.mg_ext = GHC.noExtField
-    , Syntax.mg_alts = alts
-    , Syntax.mg_origin = BasicTypes.Generated
-    }
-#endif
+enableGeneratedExtensions :: Session.DynFlags -> Session.DynFlags
+enableGeneratedExtensions dflags =
+  foldl
+    Session.xopt_set
+    dflags
+    [ LangExt.TypeApplications
+    , LangExt.DataKinds
+    , LangExt.TypeFamilies
+    , LangExt.TypeOperators
+    , LangExt.ScopedTypeVariables
+    , LangExt.FlexibleContexts
+    ]
 
-#if MIN_VERSION_ghc(9,10,0)
-mgExtField :: BasicTypes.Origin
-mgExtField = BasicTypes.Generated BasicTypes.OtherExpansion BasicTypes.DoPmc
-#elif MIN_VERSION_ghc(9,8,0)
-mgExtField :: BasicTypes.Origin
-mgExtField = BasicTypes.Generated BasicTypes.DoPmc
-#elif MIN_VERSION_ghc(9,6,0)
-mgExtField :: BasicTypes.Origin
-mgExtField = BasicTypes.Generated
-#endif
+{- | Render a parsed type back to source text using GHC's pretty-printer. Used to reproduce
+  user-written field types and instance heads inside the generated instance source.
 
-{- | Construct an 'HsApp' expression node.
-
-@since 0.2.3.2
+@since 0.2.5.0
 -}
-mkHsApp :: GHC.LHsExpr GHC.GhcPs -> GHC.LHsExpr GHC.GhcPs -> GHC.LHsExpr GHC.GhcPs
-mkHsApp fun arg =
-#if MIN_VERSION_ghc(9,10,0)
-  mkLocated (Syntax.HsApp GHC.noExtField fun arg)
-#else
-  mkLocated (Syntax.HsApp Ann.noAnn fun arg)
-#endif
-
-{- | Construct an 'HsAppType' expression node (visible type application).
-
-@since 0.2.3.2
--}
-mkHsAppType :: GHC.LHsExpr GHC.GhcPs -> GHC.LHsWcType GHC.GhcPs -> GHC.LHsExpr GHC.GhcPs
-mkHsAppType fun tyArg =
-#if MIN_VERSION_ghc(9,10,0)
-  mkLocated (Syntax.HsAppType Ann.noAnn fun tyArg)
-#elif MIN_VERSION_ghc(9,6,0)
-  mkLocated (Syntax.HsAppType GHC.noExtField fun (SrcLoc.L Ann.NoTokenLoc GHC.HsTok) tyArg)
-#else
-  mkLocated (Syntax.HsAppType SrcLoc.noSrcSpan fun tyArg)
-#endif
+showHsType :: GHC.LHsType GHC.GhcPs -> String
+showHsType =
+  Outputable.showPprUnsafe . SrcLoc.unLoc
 
 {- | Wrap a declaration-processing function into a full 'parsedResultAction' handler.
 
-  The callback receives the module's declarations and returns a list of import declarations to
-  add and the new list of declarations. Errors are added to 'PsMessages' and returned to GHC.
+  The callback receives the module's 'Session.DynFlags' (needed to parse generated source) and
+  declarations, and returns a list of import declarations to add and the new list of declarations.
+  Errors are added to 'PsMessages' and returned to GHC.
 
 @since 0.2.3.2
 -}
 wrapParsedResultAction ::
-  ([GHC.LHsDecl GHC.GhcPs] -> Either (SrcLoc.SrcSpan, String) ([GHC.LImportDecl GHC.GhcPs], [GHC.LHsDecl GHC.GhcPs])) ->
+  (Session.DynFlags -> [GHC.LHsDecl GHC.GhcPs] -> Either (SrcLoc.SrcSpan, String) ([GHC.LImportDecl GHC.GhcPs], [GHC.LHsDecl GHC.GhcPs])) ->
   [Plugins.CommandLineOption] ->
   ModSummary.ModSummary ->
   Plugins.ParsedResult ->
   HscTypes.Hsc Plugins.ParsedResult
-wrapParsedResultAction processDecls _opts _modSummary parsedResult =
+wrapParsedResultAction processDecls _opts modSummary parsedResult =
   let
+    dflags = ModSummary.ms_hspp_opts modSummary
     hpm = Plugins.parsedResultModule parsedResult
   in
     case GHC.hpm_module hpm of
@@ -169,7 +141,7 @@ wrapParsedResultAction processDecls _opts _modSummary parsedResult =
         let
           decls = getModuleDecls hsModule
         in
-          case processDecls decls of
+          case processDecls dflags decls of
             Left (srcSpan, msg) ->
               let
                 errMsg = mkPsError srcSpan msg
@@ -210,42 +182,17 @@ mkPsError srcSpan msg =
 #endif
     $ Error.mkPlainError [] (Outputable.text msg)
 
-{- | The 'NoSrcStrict' value, whose module location varies across GHC versions.
+{- | Wrap a value with an empty source location annotation. Used internally to build the injected
+  qualified imports.
 
 @since 0.2.3.2
 -}
-#if MIN_VERSION_ghc(9,6,0)
-noSrcStrict :: SyntaxBasic.SrcStrictness
-noSrcStrict = SyntaxBasic.NoSrcStrict
+#if MIN_VERSION_ghc(9,10,0)
+mkLocated :: Ann.HasAnnotation ann => a -> SrcLoc.GenLocated ann a
+mkLocated = SrcLoc.L Ann.noSrcSpanA
 #else
-noSrcStrict :: DataCon.SrcStrictness
-noSrcStrict = DataCon.NoSrcStrict
-#endif
-
-{- | The 'NotPromoted' value, whose module location varies across GHC versions.
-
-@since 0.2.3.2
--}
-#if MIN_VERSION_ghc(9,6,0)
-notPromoted :: Syntax.PromotionFlag
-notPromoted = Syntax.NotPromoted
-
-{- | The 'IsPromoted' value, whose module location varies across GHC versions.
-
-@since 0.2.3.2
--}
-isPromoted :: Syntax.PromotionFlag
-isPromoted = Syntax.IsPromoted
-#else
-notPromoted :: BasicTypes.PromotionFlag
-notPromoted = BasicTypes.NotPromoted
-
-{- | The 'IsPromoted' value, whose module location varies across GHC versions.
-
-@since 0.2.3.2
--}
-isPromoted :: BasicTypes.PromotionFlag
-isPromoted = BasicTypes.IsPromoted
+mkLocated :: a -> SrcLoc.GenLocated (Ann.SrcAnn ann) a
+mkLocated = SrcLoc.L Ann.noSrcSpanA
 #endif
 
 {- | Extract the list of declarations from a parsed module, abstracting over the
@@ -303,7 +250,9 @@ setModuleImports newImports hsModule = hsModule {GHC.hsmodImports = newImports}
   The import is marked implicit ('ideclImplicit = True') so that GHC's unused-import
   checker does not flag it as redundant. GHC does not track usage from plugin-generated
   code when determining whether an import is used, so without this flag the injected
-  imports would always be reported as redundant despite being required.
+  imports would always be reported as redundant despite being required. Because this flag
+  cannot be expressed in source syntax, the injected imports must be built as AST nodes
+  rather than rendered as text and parsed.
 
 @since 0.2.5.0
 -}
@@ -374,218 +323,3 @@ getGADTConName conDecl =
           OccName.occNameString (RdrName.rdrNameOcc firstName)
     Syntax.ConDeclH98 {Syntax.con_name = SrcLoc.L _ name} ->
       OccName.occNameString (RdrName.rdrNameOcc name)
-
-{- | Construct an 'HsType' for a string type literal, abstracting over the
-  change in 'HsTyLit' parameterization in GHC 9.6.
-
-@since 0.2.3.2
--}
-mkHsTyLit :: String -> GHC.HsType GHC.GhcPs
-mkHsTyLit str =
-  let
-#if MIN_VERSION_ghc(9,6,0)
-    tyLit :: Syntax.HsTyLit GHC.GhcPs
-#else
-    tyLit :: Syntax.HsTyLit
-#endif
-    tyLit = Syntax.HsStrTy SourceText.NoSourceText (FS.mkFastString str)
-  in
-    Syntax.HsTyLit GHC.noExtField tyLit
-
-{- | Construct a 'FunBind', abstracting over the extra @fun_tick@ field present in GHC 9.4.
-
-@since 0.2.3.2
--}
-mkFunBind ::
-  GHC.LIdP GHC.GhcPs ->
-  Syntax.MatchGroup GHC.GhcPs (GHC.LHsExpr GHC.GhcPs) ->
-  GHC.HsBind GHC.GhcPs
-mkFunBind funId matchGroup =
-  Syntax.FunBind
-    { Syntax.fun_ext = GHC.noExtField
-    , Syntax.fun_id = funId
-    , Syntax.fun_matches = matchGroup
-#if !MIN_VERSION_ghc(9,6,0)
-    , Syntax.fun_tick = []
-#endif
-    }
-
-{- | Construct an 'HsOpTy' node, abstracting over the 'PromotionFlag' field added in GHC 9.4.
-
-@since 0.2.3.2
--}
-mkHsOpTy ::
-  GHC.LHsType GHC.GhcPs ->
-  GHC.LIdP GHC.GhcPs ->
-  GHC.LHsType GHC.GhcPs ->
-  GHC.HsType GHC.GhcPs
-mkHsOpTy lhs op rhs =
-  Syntax.HsOpTy Ann.noAnn notPromoted lhs op rhs
-
-{- | Construct a guarded right-hand side.
-
-@since 0.2.3.2
--}
-mkGRHS :: GHC.LHsExpr GHC.GhcPs -> Syntax.LGRHS GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
-mkGRHS body =
-  mkLocated (Syntax.GRHS Ann.noAnn [] body)
-
-{- | Construct an 'HsPar' expression, abstracting over the token fields added in GHC 9.4
-  and removed again in GHC 9.10.
-
-@since 0.2.4.0
--}
-mkHsPar :: GHC.LHsExpr GHC.GhcPs -> GHC.LHsExpr GHC.GhcPs
-#if MIN_VERSION_ghc(9,10,0)
-mkHsPar expr =
-  mkLocated (Syntax.HsPar Ann.noAnn expr)
-#else
-mkHsPar expr =
-  mkLocated (Syntax.HsPar Ann.noAnn (SrcLoc.L Ann.NoTokenLoc GHC.HsTok) expr (SrcLoc.L Ann.NoTokenLoc GHC.HsTok))
-#endif
-
-{- | Construct an 'HsCase' expression, abstracting over the token field added in GHC 9.4
-  and removed again in GHC 9.10.
-
-@since 0.2.4.0
--}
-mkHsCase ::
-  GHC.LHsExpr GHC.GhcPs ->
-  Syntax.MatchGroup GHC.GhcPs (GHC.LHsExpr GHC.GhcPs) ->
-  GHC.LHsExpr GHC.GhcPs
-#if MIN_VERSION_ghc(9,10,0)
-mkHsCase scrutinee mg =
-  mkLocated (Syntax.HsCase Ann.noAnn scrutinee mg)
-#else
-mkHsCase scrutinee mg =
-  mkLocated (Syntax.HsCase Ann.noAnn scrutinee mg)
-#endif
-
-{- | Construct family equation patterns, abstracting over the difference between
-  GHC versions (some use @[LHsTypeArg]@, others use @[LHsType]@).
-
-@since 0.2.4.0
--}
-#if MIN_VERSION_ghc(9,10,0)
-mkFamEqnPats :: [GHC.LHsType GHC.GhcPs] -> Syntax.HsFamEqnPats GHC.GhcPs
-mkFamEqnPats tys =
-  fmap (\ty -> Syntax.HsValArg GHC.noExtField ty) tys
-#elif MIN_VERSION_ghc(9,8,0)
-mkFamEqnPats :: [GHC.LHsType GHC.GhcPs] -> Syntax.HsTyPats GHC.GhcPs
-mkFamEqnPats tys =
-  fmap Syntax.HsValArg tys
-#else
-mkFamEqnPats :: [GHC.LHsType GHC.GhcPs] -> [GHC.LHsTypeArg GHC.GhcPs]
-mkFamEqnPats tys =
-  fmap Syntax.HsValArg tys
-#endif
-
-{- | An empty annotation value suitable for extension fields that are @[AddEpAnn]@ on GHC 9.10+
-  and @EpAnn [AddEpAnn]@ on earlier versions.
-
-@since 0.2.4.0
--}
-#if MIN_VERSION_ghc(9,10,0)
-noAnnEpAnn :: [Ann.AddEpAnn]
-noAnnEpAnn = []
-#else
-noAnnEpAnn :: Ann.EpAnn [Ann.AddEpAnn]
-noAnnEpAnn = Ann.noAnn
-#endif
-
-{- | Construct the extension field for 'ClsInstDecl', which differs across GHC versions.
-
-@since 0.2.4.0
--}
-mkClsInstDeclExt :: Syntax.XCClsInstDecl GHC.GhcPs
-#if MIN_VERSION_ghc(9,10,0)
-mkClsInstDeclExt =
-  (Nothing, [], Ann.NoAnnSortKey)
-#else
-mkClsInstDeclExt =
-  (Ann.noAnn, Ann.NoAnnSortKey)
-#endif
-
-{- | Construct a signature pattern @(pat :: ty)@.
-
-@since 0.2.4.0
--}
-mkSigPat :: GHC.LPat GHC.GhcPs -> GHC.LHsType GHC.GhcPs -> GHC.Pat GHC.GhcPs
-mkSigPat pat ty =
-  let
-    patSigType =
-      Syntax.HsPS
-        { Syntax.hsps_ext = Ann.noAnn
-        , Syntax.hsps_body = ty
-        }
-  in
-#if MIN_VERSION_ghc(9,10,0)
-    Syntax.SigPat [] pat patSigType
-#else
-    Syntax.SigPat Ann.noAnn pat patSigType
-#endif
-
-{- | Construct the unit type @()@ as an AST node. Uses 'HsTupleTy' with an empty field list,
-  which GHC resolves without requiring any imports (unlike an unqualified @()@ type constructor
-  reference, which is not in scope under @NoImplicitPrelude@).
-
-@since 0.2.5.0
--}
-mkUnitTy :: GHC.LHsType GHC.GhcPs
-mkUnitTy =
-  mkLocated (Syntax.HsTupleTy Ann.noAnn Syntax.HsBoxedOrConstraintTuple [])
-
-{- | Construct the unit value expression @()@ as an AST node. Uses 'ExplicitTuple' with an
-  empty field list, which GHC resolves without requiring any imports.
-
-@since 0.2.5.0
--}
-mkUnitExpr :: GHC.LHsExpr GHC.GhcPs
-mkUnitExpr =
-  mkLocated (Syntax.ExplicitTuple Ann.noAnn [] BasicTypes.Boxed)
-
-{- | Construct the unit pattern @()@ as an AST node. Uses 'TuplePat' with an empty field
-  list, which GHC resolves without requiring any imports.
-
-@since 0.2.5.0
--}
-mkUnitPat :: GHC.LPat GHC.GhcPs
-mkUnitPat =
-  mkLocated (Syntax.TuplePat Ann.noAnn [] BasicTypes.Boxed)
-
-{- | Construct a lambda expression @\\pat -> body@.
-
-@since 0.2.5.0
--}
-mkLamExpr ::
-  GHC.LPat GHC.GhcPs ->
-  GHC.LHsExpr GHC.GhcPs ->
-  GHC.LHsExpr GHC.GhcPs
-mkLamExpr pat body =
-  let
-    grhs = mkGRHS body
-    grhss =
-      Syntax.GRHSs
-        { Syntax.grhssExt = GHC.emptyComments
-        , Syntax.grhssGRHSs = [grhs]
-        , Syntax.grhssLocalBinds = Syntax.EmptyLocalBinds GHC.noExtField
-        }
-    match =
-      mkLocated
-        Syntax.Match
-          { Syntax.m_ext = Ann.noAnn
-#if MIN_VERSION_ghc(9,10,0)
-          , Syntax.m_ctxt = Syntax.LamAlt Syntax.LamSingle
-#else
-          , Syntax.m_ctxt = Syntax.LambdaExpr
-#endif
-          , Syntax.m_pats = [pat]
-          , Syntax.m_grhss = grhss
-          }
-    mg = mkMatchGroup (mkLocated [match])
-  in
-#if MIN_VERSION_ghc(9,10,0)
-    mkLocated (Syntax.HsLam Ann.noAnn Syntax.LamSingle mg)
-#else
-    mkLocated (Syntax.HsLam GHC.noExtField mg)
-#endif

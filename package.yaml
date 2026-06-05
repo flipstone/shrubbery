@@ -33,6 +33,7 @@ library:
     - base >= 4.13 && < 5
     - deepseq >= 1.4 && <= 1.6
     - ghc >= 9.4
+    - ghc-boot >= 9.4
     - primitive >= 0.7.3.0 && < 0.10
   exposed-modules:
     - Shrubbery

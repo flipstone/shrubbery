@@ -45,21 +45,24 @@ deriving instance ShrubberyMagic => TaggedUnionable Light
 
 generates @TaggedBranchTypes Light = \'[\"On\" \@= (), \"Off\" \@= ()]@, with dissection passing @()@
 as the value and unification wrapping the constructor in @\\() -> Con@.
+
+Rather than constructing the instance as GHC AST nodes directly, the plugin renders it as Haskell
+source text and parses it with GHC's own parser (see 'Shrubbery.GHCCompat.parseInstanceDecls').
+This keeps the plugin almost entirely free of the GHC-version-specific AST handling that would
+otherwise be required.
 -}
 module Shrubbery.Plugin
   ( plugin
   , ShrubberyMagic (..)
   ) where
 
-import GHC.Data.Bag qualified as Bag
+import Data.List (intercalate)
 import GHC.Driver.Plugins qualified as Plugins
+import GHC.Driver.Session qualified as Session
 import GHC.Hs qualified as GHC
-import GHC.Parser.Annotation qualified as Ann
-import GHC.Types.Fixity qualified as Fixity
 import GHC.Types.Name.Occurrence qualified as OccName
 import GHC.Types.Name.Reader qualified as RdrName
 import GHC.Types.SrcLoc qualified as SrcLoc
-import GHC.Unit.Module qualified as Module
 import Language.Haskell.Syntax qualified as Syntax
 import Shrubbery.GHCCompat qualified as Compat
 
@@ -93,35 +96,41 @@ plugin =
     }
 
 -- | The module qualifier used by plugin-generated code to reference shrubbery internals.
-magicQualifier :: Module.ModuleName
-magicQualifier = Module.mkModuleName "Shrubbery_Magic_"
+magicQualifier :: String
+magicQualifier = "Shrubbery_Magic_"
+
+-- | Qualify an internal name under the magic qualifier, e.g. @Shrubbery_Magic_.taggedBranch@.
+magicQualified :: String -> String
+magicQualified name = magicQualifier ++ "." ++ name
 
 -- | Qualified imports added to any module where the plugin generates instances.
 magicImports :: [GHC.LImportDecl GHC.GhcPs]
 magicImports =
-  [ Compat.mkQualifiedImportDecl "Shrubbery.Plugin" "Shrubbery_Magic_"
-  , Compat.mkQualifiedImportDecl "Shrubbery.TaggedBranches" "Shrubbery_Magic_"
-  , Compat.mkQualifiedImportDecl "Shrubbery.TypeList" "Shrubbery_Magic_"
+  [ Compat.mkQualifiedImportDecl "Shrubbery.Plugin" magicQualifier
+  , Compat.mkQualifiedImportDecl "Shrubbery.TaggedBranches" magicQualifier
+  , Compat.mkQualifiedImportDecl "Shrubbery.TypeList" magicQualifier
   ]
 
--- | Process all declarations, replacing standalone deriving declarations that match the
---   @ShrubberyMagic => TaggedUnionable X@ pattern with generated instances.
---   Returns any imports to add and the new declarations.
+{- | Process all declarations, replacing standalone deriving declarations that match the
+  @ShrubberyMagic => TaggedUnionable X@ pattern with generated instances.
+  Returns any imports to add and the new declarations.
+-}
 processDecls ::
+  Session.DynFlags ->
   [GHC.LHsDecl GHC.GhcPs] ->
   Either (SrcLoc.SrcSpan, String) ([GHC.LImportDecl GHC.GhcPs], [GHC.LHsDecl GHC.GhcPs])
-processDecls decls =
+processDecls dflags decls = do
   let
     adtDefs = collectADTDefs decls
-    results = fmap (processDecl adtDefs) decls
+  results <- traverse (processDecl dflags adtDefs) decls
+  let
     anyMagic = any processDeclWasMagic results
     newDecls = concatMap processDeclDecls results
     imports =
       if anyMagic
         then magicImports
         else []
-  in
-    Right (imports, newDecls)
+  pure (imports, newDecls)
 
 -- | Result of processing a single declaration.
 data ProcessDeclResult = ProcessDeclResult
@@ -132,7 +141,7 @@ data ProcessDeclResult = ProcessDeclResult
 -- | Result of matching a standalone deriving declaration.
 data DerivingMatch = DerivingMatch
   { derivingMatchAdtName :: String
-  , derivingMatchInstType :: GHC.LHsSigType GHC.GhcPs
+  , derivingMatchInstHead :: String
   }
 
 {- | Process a single declaration. If it is a standalone deriving declaration matching
@@ -140,10 +149,11 @@ data DerivingMatch = DerivingMatch
   instance. Otherwise, return it unchanged.
 -}
 processDecl ::
+  Session.DynFlags ->
   [(String, ADTDef)] ->
   GHC.LHsDecl GHC.GhcPs ->
-  ProcessDeclResult
-processDecl adtDefs lDecl@(SrcLoc.L _ decl) =
+  Either (SrcLoc.SrcSpan, String) ProcessDeclResult
+processDecl dflags adtDefs lDecl@(SrcLoc.L _ decl) =
   case decl of
     Syntax.DerivD _ derivDecl ->
       case matchShrubberyMagicDeriving derivDecl of
@@ -151,18 +161,23 @@ processDecl adtDefs lDecl@(SrcLoc.L _ decl) =
           case lookup (derivingMatchAdtName match) adtDefs of
             Just adtDef ->
               let
-                constructors = adtDefConstructors adtDef
+                source = renderInstanceModule match (adtDefConstructors adtDef)
               in
-                ProcessDeclResult
-                  { processDeclWasMagic = True
-                  , processDeclDecls = [generateTaggedUnionableInstDecl (derivingMatchInstType match) (derivingMatchAdtName match) constructors]
-                  }
+                case Compat.parseInstanceDecls dflags source of
+                  Right generatedDecls ->
+                    Right
+                      ProcessDeclResult
+                        { processDeclWasMagic = True
+                        , processDeclDecls = generatedDecls
+                        }
+                  Left err ->
+                    Left (SrcLoc.noSrcSpan, err)
             Nothing ->
-              ProcessDeclResult {processDeclWasMagic = False, processDeclDecls = [lDecl]}
+              Right (ProcessDeclResult False [lDecl])
         Nothing ->
-          ProcessDeclResult {processDeclWasMagic = False, processDeclDecls = [lDecl]}
+          Right (ProcessDeclResult False [lDecl])
     _ ->
-      ProcessDeclResult {processDeclWasMagic = False, processDeclDecls = [lDecl]}
+      Right (ProcessDeclResult False [lDecl])
 
 -- | Collect all data type definitions from the module declarations into an association list.
 collectADTDefs :: [GHC.LHsDecl GHC.GhcPs] -> [(String, ADTDef)]
@@ -186,13 +201,14 @@ collectADTDef (SrcLoc.L _ decl) =
 {- | Match a standalone deriving declaration of the form
   @deriving instance ShrubberyMagic => TaggedUnionable X@.
 
-  Returns a 'DerivingMatch' containing the ADT name and the user's full instance type
-  (for reuse as the generated instance head), or 'Nothing' if the pattern doesn't match.
+  Returns a 'DerivingMatch' containing the ADT name and the user's instance head rendered as
+  source text (reused verbatim for the generated instance head), or 'Nothing' if the pattern
+  doesn't match.
 -}
 matchShrubberyMagicDeriving :: Syntax.DerivDecl GHC.GhcPs -> Maybe DerivingMatch
 matchShrubberyMagicDeriving derivDecl =
   case Syntax.deriv_type derivDecl of
-    Syntax.HsWC _ lSigTy@(SrcLoc.L _ sigTy) ->
+    Syntax.HsWC _ (SrcLoc.L _ sigTy) ->
       case SrcLoc.unLoc (Syntax.sig_body sigTy) of
         Syntax.HsQualTy _ ctxt bodyTy ->
           case (hasShrubberyMagicCtxt (SrcLoc.unLoc ctxt), extractTaggedUnionableApp (SrcLoc.unLoc bodyTy)) of
@@ -200,7 +216,7 @@ matchShrubberyMagicDeriving derivDecl =
               Just
                 DerivingMatch
                   { derivingMatchAdtName = adtName
-                  , derivingMatchInstType = lSigTy
+                  , derivingMatchInstHead = Compat.showHsType (Syntax.sig_body sigTy)
                   }
             _ -> Nothing
         _ ->
@@ -244,7 +260,6 @@ data ADTDef = ADTDef
 data ConstructorInfo = ConstructorInfo
   { constructorName :: String
   , constructorFieldType :: String
-  , constructorFieldTypeNode :: Maybe (GHC.LHsType GHC.GhcPs)
   , constructorIsNullary :: Bool
   }
 
@@ -262,440 +277,158 @@ extractConstructor conDecl =
   case conDecl of
     Syntax.ConDeclH98 {Syntax.con_name = SrcLoc.L _ name, Syntax.con_args = args} ->
       let
-        (fieldTypeStr, fieldTypeNode, isNullary) = extractConDeclH98Field args
+        (fieldTypeStr, isNullary) = extractConDeclH98Field args
       in
         ConstructorInfo
           { constructorName = rdrNameString name
           , constructorFieldType = fieldTypeStr
-          , constructorFieldTypeNode = fieldTypeNode
           , constructorIsNullary = isNullary
           }
     Syntax.ConDeclGADT {} ->
       ConstructorInfo
         { constructorName = Compat.getGADTConName conDecl
         , constructorFieldType = "()"
-        , constructorFieldTypeNode = Nothing
         , constructorIsNullary = True
         }
 
 extractConDeclH98Field ::
   Syntax.HsConDeclH98Details GHC.GhcPs ->
-  (String, Maybe (GHC.LHsType GHC.GhcPs), Bool)
+  (String, Bool)
 extractConDeclH98Field args =
   case args of
     Syntax.PrefixCon _ [GHC.HsScaled _ fieldTy] ->
-      (typeNodeToString (SrcLoc.unLoc fieldTy), Just fieldTy, False)
+      (Compat.showHsType fieldTy, False)
     Syntax.PrefixCon _ [] ->
-      ("()", Nothing, True)
+      ("()", True)
     _ ->
-      ("()", Nothing, True)
-
-typeNodeToString :: GHC.HsType GHC.GhcPs -> String
-typeNodeToString hsType =
-  case hsType of
-    Syntax.HsTyVar _ _ (SrcLoc.L _ name) -> rdrNameString name
-    _ -> "()"
+      ("()", True)
 
 -- | Instance generation
 
-{- | Generate:
+{- | Render the generated instance as a complete (header-bearing) Haskell module so that it can be
+  fed to GHC's parser. Only the instance declaration is meaningful; the module wrapper exists only
+  to satisfy 'parseModule'. For @data Fruit = Apple Int | Banana String@ this produces, modulo
+  whitespace:
 
   @
-    instance ShrubberyMagic => TaggedUnionable ADT where
-      type TaggedBranchTypes ADT = '[\"Con1\" \@= Type1, ...]
-      dissectTagged shrubberyBranches shrubberyArg =
-        case usingShrubberyMagic shrubberyArg of
-          Con1 val -> selectBranchAtTag \@"Con1" shrubberyBranches val
-          Con2 val -> selectBranchAtTag \@"Con2" shrubberyBranches val
-      unifyTaggedWithTag _ =
-        selectBranchAtTag \@tag
-          ( taggedBranchBuild
-            $ taggedBranch \@"Con1" Con1
-            $ taggedBranch \@"Con2" Con2
-            $ taggedBranchEnd
-          )
-  @
--}
-generateTaggedUnionableInstDecl ::
-  GHC.LHsSigType GHC.GhcPs ->
-  String ->
-  [ConstructorInfo] ->
-  GHC.LHsDecl GHC.GhcPs
-generateTaggedUnionableInstDecl userInstType adtName constructors =
-  let
-    -- Associated type family: type TaggedBranchTypes ADT = '[...]
-    tyFamInst = generateTaggedBranchTypesFamInst adtName constructors
-
-    -- dissectTagged method
-    dissectionBind = generateDissectionBind constructors
-
-    -- unifyTaggedWithTag method
-    unificationBind = generateUnificationBind constructors
-  in
-    mkClsInstDeclWithTyFam userInstType [tyFamInst] [Compat.mkLocated dissectionBind, Compat.mkLocated unificationBind]
-
--- | Generate the associated type instance: @type TaggedBranchTypes ADT = '[\"Con1\" \@= Type1, ...]@
-generateTaggedBranchTypesFamInst ::
-  String ->
-  [ConstructorInfo] ->
-  Syntax.TyFamInstDecl GHC.GhcPs
-generateTaggedBranchTypesFamInst adtName constructors =
-  let
-    tagEntries :: [GHC.LHsType GHC.GhcPs]
-    tagEntries = fmap mkTagEntry constructors
-
-    tagListTy :: GHC.LHsType GHC.GhcPs
-    tagListTy = Compat.mkLocated (Syntax.HsExplicitListTy Ann.noAnn Compat.isPromoted tagEntries)
-
-    tyConName :: GHC.LIdP GHC.GhcPs
-    tyConName = Compat.mkLocated (RdrName.mkRdrUnqual (OccName.mkTcOcc "TaggedBranchTypes"))
-
-    adtTy :: GHC.LHsType GHC.GhcPs
-    adtTy = mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTcOcc adtName))
-
-    famEqn :: Syntax.TyFamInstEqn GHC.GhcPs
-    famEqn =
-      Syntax.FamEqn
-        { Syntax.feqn_ext = Compat.noAnnEpAnn
-        , Syntax.feqn_tycon = tyConName
-        , Syntax.feqn_bndrs = Syntax.HsOuterImplicit GHC.noExtField
-        , Syntax.feqn_pats = Compat.mkFamEqnPats [adtTy]
-        , Syntax.feqn_fixity = Fixity.Prefix
-        , Syntax.feqn_rhs = tagListTy
-        }
-  in
-    Syntax.TyFamInstDecl
-      { Syntax.tfid_xtn = Compat.noAnnEpAnn
-      , Syntax.tfid_eqn = famEqn
-      }
-
-{- | Generate the dissectTagged method binding:
-
-  @
-    dissectTagged shrubberyBranches shrubberyArg =
-      case usingShrubberyMagic shrubberyArg of
-        Con1 val -> selectBranchAtTag \@"Con1" shrubberyBranches val
-        Con2 val -> selectBranchAtTag \@"Con2" shrubberyBranches val
-  @
--}
-generateDissectionBind ::
-  [ConstructorInfo] ->
-  GHC.HsBind GHC.GhcPs
-generateDissectionBind constructors =
-  let
-    branchesRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "shrubberyBranches")
-    argRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "shrubberyArg")
-
-    caseAlts = fmap generateDissectionCaseAlt constructors
-
-    scrutinee =
-      Compat.mkHsApp
-        (mkHsVar (mkMagicQual (OccName.mkVarOcc "usingShrubberyMagic")))
-        (mkHsVar argRdrName)
-
-    caseExpr = mkHsCase scrutinee caseAlts
-
-    methodRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "dissectTagged")
-
-    matchGroup =
-      mkSingleMatchGroup
-        methodRdrName
-        [mkVarPat branchesRdrName, mkVarPat argRdrName]
-        caseExpr
-  in
-    Compat.mkFunBind (Compat.mkLocated methodRdrName) matchGroup
-
-{- | Generate the unifyTaggedWithTag method binding:
-
-  @
-    unifyTaggedWithTag _ =
-      selectBranchAtTag \@tag
-        ( taggedBranchBuild
-          $ taggedBranch \@"Con1" Con1
-          $ taggedBranch \@"Con2" Con2
-          $ taggedBranchEnd
-        )
-  @
--}
-generateUnificationBind ::
-  [ConstructorInfo] ->
-  GHC.HsBind GHC.GhcPs
-generateUnificationBind constructors =
-  let
-    methodRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "unifyTaggedWithTag")
-
-    -- (_ :: proxy tag) pattern to bring 'tag' into scope
-    proxyPat = mkTypedWildPat "proxy" "tag"
-
-    -- selectBranchAtTag @tag (taggedBranchBuild $ taggedBranch @"Con1" Con1 $ ... $ taggedBranchEnd)
-    tagTyVar = mkHsWcTyVar "tag"
-    selectExpr =
-      Compat.mkHsAppType
-        (mkHsVar (mkMagicQual (OccName.mkVarOcc "selectBranchAtTag")))
-        tagTyVar
-
-    branchChain = generateTaggedBranchChain constructors
-
-    body =
-      Compat.mkHsApp
-        selectExpr
-        (mkHsPar branchChain)
-
-    matchGroup =
-      mkSingleMatchGroup
-        methodRdrName
-        [proxyPat]
-        body
-  in
-    Compat.mkFunBind (Compat.mkLocated methodRdrName) matchGroup
-generateDissectionCaseAlt ::
-  ConstructorInfo ->
-  GHC.LMatch GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
-generateDissectionCaseAlt conInfo =
-  let
-    conRdrName = RdrName.mkRdrUnqual (OccName.mkDataOcc (constructorName conInfo))
-    branchesRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "shrubberyBranches")
-
-    tagTypeArg = mkHsTyLitString (constructorName conInfo)
-
-    -- selectBranchAtTag @"Con" shrubberyBranches val
-    selectExpr =
-      Compat.mkHsAppType
-        (mkHsVar (mkMagicQual (OccName.mkVarOcc "selectBranchAtTag")))
-        tagTypeArg
-
-    (conPat, valExpr) =
-      if constructorIsNullary conInfo
-        then
-          ( mkConPat conRdrName []
-          , Compat.mkUnitExpr
-          )
-        else
-          let
-            valRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "val")
-          in
-            ( mkConPat conRdrName [mkVarPat valRdrName]
-            , mkHsVar valRdrName
-            )
-
-    body =
-      Compat.mkHsApp
-        (Compat.mkHsApp selectExpr (mkHsVar branchesRdrName))
-        valExpr
-
-    grhs = Compat.mkGRHS body
-    grhss = mkGRHSs [grhs]
-  in
-    Compat.mkLocated
-      Syntax.Match
-        { Syntax.m_ext = Ann.noAnn
-        , Syntax.m_ctxt = Syntax.CaseAlt
-        , Syntax.m_pats = [conPat]
-        , Syntax.m_grhss = grhss
-        }
-
--- | Generate @taggedBranchBuild $ taggedBranch \@"Con1" Con1 $ taggedBranch \@"Con2" Con2 $ ... $ taggedBranchEnd@
-generateTaggedBranchChain :: [ConstructorInfo] -> GHC.LHsExpr GHC.GhcPs
-generateTaggedBranchChain constructors =
-  let
-    branchBuildExpr = mkHsVar (mkMagicQual (OccName.mkVarOcc "taggedBranchBuild"))
-
-    branchExprs =
-      fmap
-        ( \conInfo ->
-            let
-              tagTypeArg = mkHsTyLitString (constructorName conInfo)
-              taggedBranchExpr =
-                Compat.mkHsAppType
-                  (mkHsVar (mkMagicQual (OccName.mkVarOcc "taggedBranch")))
-                  tagTypeArg
-
-              conExpr =
-                if constructorIsNullary conInfo
-                  then
-                    Compat.mkLamExpr
-                      Compat.mkUnitPat
-                      (mkHsVar (RdrName.mkRdrUnqual (OccName.mkDataOcc (constructorName conInfo))))
-                  else
-                    mkHsVar (RdrName.mkRdrUnqual (OccName.mkDataOcc (constructorName conInfo)))
-            in
-              Compat.mkHsApp
-                taggedBranchExpr
-                conExpr
-        )
-        constructors
-
-    branchEndExpr = mkHsVar (mkMagicQual (OccName.mkVarOcc "taggedBranchEnd"))
-  in
-    mkDollarChain (branchBuildExpr : branchExprs ++ [branchEndExpr])
-
--- | Create a qualified RdrName under the magic qualifier.
-mkMagicQual :: OccName.OccName -> RdrName.RdrName
-mkMagicQual = RdrName.mkRdrQual magicQualifier
-
--- | Create a class instance declaration with associated type family instances.
-mkClsInstDeclWithTyFam ::
-  GHC.LHsSigType GHC.GhcPs ->
-  [Syntax.TyFamInstDecl GHC.GhcPs] ->
-  [GHC.LHsBind GHC.GhcPs] ->
-  GHC.LHsDecl GHC.GhcPs
-mkClsInstDeclWithTyFam instHead tyFamInsts binds =
-  let
-    clsInstDecl =
-      Syntax.ClsInstDecl
-        { Syntax.cid_ext = Compat.mkClsInstDeclExt
-        , Syntax.cid_poly_ty = instHead
-        , Syntax.cid_binds = Bag.listToBag binds
-        , Syntax.cid_sigs = []
-        , Syntax.cid_tyfam_insts = fmap Compat.mkLocated tyFamInsts
-        , Syntax.cid_datafam_insts = []
-        , Syntax.cid_overlap_mode = Nothing
-        }
-
-    instDecl =
-      Syntax.ClsInstD
-        { Syntax.cid_d_ext = GHC.noExtField
-        , Syntax.cid_inst = clsInstDecl
-        }
-  in
-    Compat.mkLocated (Syntax.InstD GHC.noExtField instDecl)
-
--- | Wrap an expression in parentheses: @(expr)@
-mkHsPar :: GHC.LHsExpr GHC.GhcPs -> GHC.LHsExpr GHC.GhcPs
-mkHsPar expr =
-  Compat.mkHsPar expr
-
--- | Make a wildcard-wrapped type variable, for use in type applications.
-mkHsWcTyVar :: String -> GHC.LHsWcType GHC.GhcPs
-mkHsWcTyVar name =
-  Syntax.HsWC
-    GHC.noExtField
-    (Compat.mkLocated (Syntax.HsTyVar Ann.noAnn Compat.notPromoted (Compat.mkLocated (RdrName.mkRdrUnqual (OccName.mkTyVarOcc name)))))
-
--- | Generate a pattern @(_ :: tyConName tyVarName)@ to bring a type variable into scope.
-mkTypedWildPat :: String -> String -> GHC.LPat GHC.GhcPs
-mkTypedWildPat tyConName tyVarName =
-  let
-    tyConTy :: GHC.LHsType GHC.GhcPs
-    tyConTy = mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTyVarOcc tyConName))
-
-    tyVarTy :: GHC.LHsType GHC.GhcPs
-    tyVarTy = mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTyVarOcc tyVarName))
-
-    appTy :: GHC.LHsType GHC.GhcPs
-    appTy =
-      Compat.mkLocated
-        (Syntax.HsAppTy GHC.noExtField tyConTy tyVarTy)
-
-    wildPat :: GHC.LPat GHC.GhcPs
-    wildPat = Compat.mkLocated (Syntax.WildPat GHC.noExtField)
-  in
-    Compat.mkLocated (Compat.mkSigPat wildPat appTy)
-
--- | Chain expressions with ($): @e1 $ e2 $ e3@ becomes @e1 $ (e2 $ e3)@
-mkDollarChain :: [GHC.LHsExpr GHC.GhcPs] -> GHC.LHsExpr GHC.GhcPs
-mkDollarChain [] = error "mkDollarChain: empty list"
-mkDollarChain [e] = e
-mkDollarChain (e : es) =
-  let
-    dollarRdrName = RdrName.mkRdrUnqual (OccName.mkVarOcc "$")
-    rest = mkDollarChain es
-  in
-    Compat.mkLocated
-      ( Syntax.OpApp
-          Ann.noAnn
-          e
-          (mkHsVar dollarRdrName)
-          rest
-      )
-
--- AST construction helpers
-
-mkTagEntry :: ConstructorInfo -> GHC.LHsType GHC.GhcPs
-mkTagEntry conInfo =
-  let
-    tagTy :: GHC.LHsType GHC.GhcPs
-    tagTy = Compat.mkLocated (Compat.mkHsTyLit (constructorName conInfo))
-
-    fieldTy :: GHC.LHsType GHC.GhcPs
-    fieldTy =
-      if constructorIsNullary conInfo
-        then Compat.mkUnitTy
-        else case constructorFieldTypeNode conInfo of
-          Just ty -> ty
-          Nothing -> mkHsTyVar (RdrName.mkRdrUnqual (OccName.mkTcOcc (constructorFieldType conInfo)))
-
-    opName :: GHC.LIdP GHC.GhcPs
-    opName = Compat.mkLocated (mkMagicQual (OccName.mkTcOcc "@="))
-  in
-    Compat.mkLocated (Compat.mkHsOpTy tagTy opName fieldTy)
-
-mkHsTyVar :: RdrName.RdrName -> GHC.LHsType GHC.GhcPs
-mkHsTyVar name =
-  Compat.mkLocated (Syntax.HsTyVar Ann.noAnn Compat.notPromoted (Compat.mkLocated name))
-
-mkHsVar :: RdrName.RdrName -> GHC.LHsExpr GHC.GhcPs
-mkHsVar name =
-  Compat.mkLocated (Syntax.HsVar GHC.noExtField (Compat.mkLocated name))
-
-mkVarPat :: RdrName.RdrName -> GHC.LPat GHC.GhcPs
-mkVarPat name =
-  Compat.mkLocated (Syntax.VarPat GHC.noExtField (Compat.mkLocated name))
-
-mkConPat :: RdrName.RdrName -> [GHC.LPat GHC.GhcPs] -> GHC.LPat GHC.GhcPs
-mkConPat conName pats =
-  Compat.mkLocated
-    Syntax.ConPat
-      { Syntax.pat_con_ext = Ann.noAnn
-      , Syntax.pat_con = Compat.mkLocated conName
-      , Syntax.pat_args = Syntax.PrefixCon [] pats
-      }
-
-mkHsTyLitString :: String -> GHC.LHsWcType GHC.GhcPs
-mkHsTyLitString str =
-  Syntax.HsWC GHC.noExtField (Compat.mkLocated (Compat.mkHsTyLit str))
-
-mkHsCase ::
-  GHC.LHsExpr GHC.GhcPs ->
-  [GHC.LMatch GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)] ->
-  GHC.LHsExpr GHC.GhcPs
-mkHsCase scrutinee alts =
-  let
-    mg = Compat.mkMatchGroup (Compat.mkLocated alts)
-  in
-    Compat.mkHsCase scrutinee mg
-
-mkGRHSs :: [GHC.LGRHS GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)] -> GHC.GRHSs GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
-mkGRHSs grhsList =
-  Syntax.GRHSs
-    { Syntax.grhssExt = GHC.emptyComments
-    , Syntax.grhssGRHSs = grhsList
-    , Syntax.grhssLocalBinds = Syntax.EmptyLocalBinds GHC.noExtField
+    module ShrubberyPluginGenerated where
+    instance ShrubberyMagic => TaggedUnionable Fruit where {
+      type TaggedBranchTypes Fruit = \'[\"Apple\" Shrubbery_Magic_.\@= Int, \"Banana\" Shrubbery_Magic_.\@= String] ;
+      dissectTagged shrubberyBranches shrubberyArg = case Shrubbery_Magic_.usingShrubberyMagic shrubberyArg of {
+        Apple val -> Shrubbery_Magic_.selectBranchAtTag \@\"Apple\" shrubberyBranches val ;
+        Banana val -> Shrubbery_Magic_.selectBranchAtTag \@\"Banana\" shrubberyBranches val
+      } ;
+      unifyTaggedWithTag (_ :: proxy tag) = Shrubbery_Magic_.selectBranchAtTag \@tag (...)
     }
+  @
 
-mkSingleMatchGroup ::
-  RdrName.RdrName ->
-  [GHC.LPat GHC.GhcPs] ->
-  GHC.LHsExpr GHC.GhcPs ->
-  GHC.MatchGroup GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
-mkSingleMatchGroup funName pats body =
+  Explicit braces and semicolons are used for the instance body and case expression so the output
+  is insensitive to layout.
+-}
+renderInstanceModule :: DerivingMatch -> [ConstructorInfo] -> String
+renderInstanceModule match constructors =
+  unlines
+    [ "module ShrubberyPluginGenerated where"
+    , renderInstance match constructors
+    ]
+
+renderInstance :: DerivingMatch -> [ConstructorInfo] -> String
+renderInstance match constructors =
+  concat
+    [ "instance ", derivingMatchInstHead match, " where {\n"
+    , renderTypeFamilyInstance match constructors, " ;\n"
+    , renderDissectionBind constructors, " ;\n"
+    , renderUnificationBind constructors, "\n"
+    , "}\n"
+    ]
+
+-- | @type TaggedBranchTypes ADT = '[\"Con1\" Shrubbery_Magic_.\@= Type1, ...]@
+renderTypeFamilyInstance :: DerivingMatch -> [ConstructorInfo] -> String
+renderTypeFamilyInstance match constructors =
+  concat
+    [ "  type TaggedBranchTypes ", derivingMatchAdtName match
+    , " = '[", intercalate ", " (fmap renderTagEntry constructors), "]"
+    ]
+
+-- | @\"Con\" Shrubbery_Magic_.\@= FieldType@
+renderTagEntry :: ConstructorInfo -> String
+renderTagEntry conInfo =
+  concat
+    [ stringLiteral (constructorName conInfo)
+    , " ", magicQualified "@=", " "
+    , constructorFieldType conInfo
+    ]
+
+{- | @dissectTagged shrubberyBranches shrubberyArg =
+       case Shrubbery_Magic_.usingShrubberyMagic shrubberyArg of { Con val -> ... ; ... }@
+-}
+renderDissectionBind :: [ConstructorInfo] -> String
+renderDissectionBind constructors =
+  concat
+    [ "  dissectTagged shrubberyBranches shrubberyArg = case "
+    , magicQualified "usingShrubberyMagic", " shrubberyArg of {\n"
+    , intercalate " ;\n" (fmap renderDissectionAlt constructors)
+    , "\n  }"
+    ]
+
+renderDissectionAlt :: ConstructorInfo -> String
+renderDissectionAlt conInfo =
   let
-    grhs = Compat.mkGRHS body
-    grhss = mkGRHSs [grhs]
-    matchCtxt =
-      Syntax.FunRhs
-        { Syntax.mc_fun = Compat.mkLocated funName
-        , Syntax.mc_fixity = Fixity.Prefix
-        , Syntax.mc_strictness = Compat.noSrcStrict
-        }
-    match :: GHC.LMatch GHC.GhcPs (GHC.LHsExpr GHC.GhcPs)
-    match =
-      Compat.mkLocated
-        Syntax.Match
-          { Syntax.m_ext = Ann.noAnn
-          , Syntax.m_ctxt = matchCtxt
-          , Syntax.m_pats = pats
-          , Syntax.m_grhss = grhss
-          }
+    (pat, valExpr) =
+      if constructorIsNullary conInfo
+        then (constructorName conInfo, "()")
+        else (constructorName conInfo ++ " val", "val")
   in
-    Compat.mkMatchGroup (Compat.mkLocated [match])
+    concat
+      [ "    ", pat, " -> "
+      , magicQualified "selectBranchAtTag"
+      , " @", stringLiteral (constructorName conInfo)
+      , " shrubberyBranches ", valExpr
+      ]
+
+{- | @unifyTaggedWithTag (_ :: proxy tag) =
+       Shrubbery_Magic_.selectBranchAtTag \@tag (taggedBranchBuild (taggedBranch \@\"Con\" Con (...)))@
+-}
+renderUnificationBind :: [ConstructorInfo] -> String
+renderUnificationBind constructors =
+  concat
+    [ "  unifyTaggedWithTag (_ :: proxy tag) = "
+    , magicQualified "selectBranchAtTag", " @tag "
+    , renderBranchChain constructors
+    ]
+
+{- | @(taggedBranchBuild (taggedBranch \@\"Con1\" Con1 (taggedBranch \@\"Con2\" Con2 taggedBranchEnd)))@
+
+  This is the right-nested application that @taggedBranchBuild $ taggedBranch ... $ ... $
+  taggedBranchEnd@ would desugar to.
+-}
+renderBranchChain :: [ConstructorInfo] -> String
+renderBranchChain constructors =
+  let
+    chain =
+      foldr
+        (\conInfo rest -> concat ["(", renderBranch conInfo, " ", rest, ")"])
+        (magicQualified "taggedBranchEnd")
+        constructors
+  in
+    concat ["(", magicQualified "taggedBranchBuild", " ", chain, ")"]
+
+-- | @Shrubbery_Magic_.taggedBranch \@\"Con\" Con@, or @... \@\"Con\" (\\() -> Con)@ for nullary.
+renderBranch :: ConstructorInfo -> String
+renderBranch conInfo =
+  let
+    conExpr =
+      if constructorIsNullary conInfo
+        then "(\\() -> " ++ constructorName conInfo ++ ")"
+        else constructorName conInfo
+  in
+    concat
+      [ magicQualified "taggedBranch"
+      , " @", stringLiteral (constructorName conInfo)
+      , " ", conExpr
+      ]
+
+-- | Render a 'String' as a Haskell string-literal token, e.g. @Con@ becomes @\"Con\"@.
+stringLiteral :: String -> String
+stringLiteral str =
+  "\"" ++ str ++ "\""
