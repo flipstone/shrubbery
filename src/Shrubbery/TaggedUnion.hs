@@ -32,9 +32,9 @@ module Shrubbery.TaggedUnion
 
 import qualified Control.DeepSeq as DeepSeq
 import Data.Proxy (Proxy (Proxy))
+import Data.Type.Equality ((:~:) (..))
 import GHC.TypeLits (KnownNat, Symbol)
 
-import Data.Type.Equality ((:~:) (..))
 import Shrubbery.BranchIndex (indexOfTypeAt, testBranchIndexEquality)
 import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch)
 import Shrubbery.Classes (EqBranches, NFDataBranches, OrdBranches, ShowBranches, unifyWithIndex)

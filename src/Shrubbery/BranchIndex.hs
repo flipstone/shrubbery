@@ -132,9 +132,9 @@ import Data.Kind (Type)
 import Data.Proxy (Proxy (Proxy))
 import Data.Type.Equality (TestEquality (testEquality), (:~:) (Refl))
 import GHC.TypeLits (KnownNat, natVal)
+import Unsafe.Coerce (unsafeCoerce)
 
 import Shrubbery.TypeList (Append, FirstIndexOf, KnownLength (lengthOfTypes), TypeAtIndex, ZippedTypes)
-import Unsafe.Coerce (unsafeCoerce)
 
 {- | A 'BranchIndex' is an zero-based index into a list of types for which the type at the index is
   known. This type is used with 'Shrubbery.Branches' to perform efficient branching at runtime.

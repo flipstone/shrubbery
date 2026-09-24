@@ -434,7 +434,7 @@ data DissectionCase
   | DissectInt
   | DissectBool
   | DissectDouble
-  deriving (Show, Enum, Bounded)
+  deriving (Bounded, Enum, Show)
 
 prop_parserRunsAllOptions :: HH.Property
 prop_parserRunsAllOptions =
@@ -474,7 +474,7 @@ data GenericSum
   | GenericSumIntA Int
   | GenericSumIntB Int
   | GenericSumNoData
-  deriving (Show, Eq, Generic)
+  deriving (Eq, Generic, Show)
 
 type instance BranchTypes GenericSum = GenericBranchTypes (Rep GenericSum)
 
