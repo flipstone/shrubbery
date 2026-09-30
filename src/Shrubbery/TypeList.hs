@@ -30,12 +30,9 @@ module Shrubbery.TypeList
   , ZippedTypes
   , Tag (..)
   , type (@=)
-  , TagIndex
-  , TagIndexWithMsg
-  , TagType
-  , TagTypeWithMsg
   , TaggedTypes
   , NotAMemberTagMsg
+  , LookupTag
   ) where
 
 import Data.Kind (Type)
@@ -65,13 +62,21 @@ type family FirstIndexOfWithMsg t (types :: [Type]) (errMsg :: ErrorMessage) whe
   FirstIndexOfWithMsg t (_ : rest) errMsg = 1 + FirstIndexOfWithMsg t rest errMsg
 
 {- | This type finds the type at the given index in a list of types. It is implemented as a type
-  synonym around 'TypeAtIndexWithMsg' to provide a nice error message when the given type is not
-  found in the list.
+  synonym to provide a nice error message when the given type is not found in the list.
 
 @since 0.1.0.0
 -}
 type TypeAtIndex n types =
-  TypeAtIndexWithMsg n types (OutOfBoundsMsg n types)
+  FoundAtIndex n types (TypeAtIndexMaybe n types)
+
+type family TypeAtIndexMaybe (n :: Nat) (types :: [Type]) :: Maybe Type where
+  TypeAtIndexMaybe _ '[] = 'Nothing
+  TypeAtIndexMaybe 0 (t : _) = 'Just t
+  TypeAtIndexMaybe n (_ : rest) = TypeAtIndexMaybe (n - 1) rest
+
+type family FoundAtIndex (n :: Nat) (types :: [Type]) (found :: Maybe Type) :: Type where
+  FoundAtIndex n types 'Nothing = TypeError (OutOfBoundsMsg n types)
+  FoundAtIndex _ _ ('Just t) = t
 
 {- | Finds the type at the given index in a list of types.
 
@@ -82,7 +87,7 @@ type TypeAtIndex n types =
 @since 0.1.0.0
 -}
 type family TypeAtIndexWithMsg (n :: Nat) (types :: [Type]) (errMsg :: ErrorMessage) where
-  TypeAtIndexWithMsg 0 '[] errMsg = TypeError errMsg
+  TypeAtIndexWithMsg _ '[] errMsg = TypeError errMsg
   TypeAtIndexWithMsg 0 (t : _) _ = t
   TypeAtIndexWithMsg n (_ : rest) errMsg = TypeAtIndexWithMsg (n - 1) rest errMsg
 
@@ -160,21 +165,22 @@ data Tag
 
 type (@=) = 'Tag
 
-type TagIndex t (tags :: [Tag]) =
-  TagIndexWithMsg t tags (NotAMemberTagMsg t tags)
+{- | Computes the index and type '(Nat, Type)' of the first occurrence of a tag,
+  or a 'NotAMemberTagMsg' if the tag is not present in the list.
 
-type family TagIndexWithMsg t (tags :: [Tag]) (errMsg :: ErrorMessage) :: Nat where
-  TagIndexWithMsg _ '[] errMsg = TypeError errMsg
-  TagIndexWithMsg t ('Tag t _ : _) _ = 0
-  TagIndexWithMsg t (_ : rest) errMsg = 1 + TagIndexWithMsg t rest errMsg
+@since 0.3.0.0
+-}
+type LookupTag (t :: Symbol) (tags :: [Tag]) =
+  FoundTag t tags (LookupTagFrom 0 t tags)
 
-type TagType t (tags :: [Tag]) =
-  TagTypeWithMsg t tags (NotAMemberTagMsg t tags)
+type family LookupTagFrom (index :: Nat) (t :: Symbol) (tags :: [Tag]) :: Maybe (Nat, Type) where
+  LookupTagFrom _ _ '[] = 'Nothing
+  LookupTagFrom index t ('Tag t typ : _) = 'Just '(index, typ)
+  LookupTagFrom index t (_ : rest) = LookupTagFrom (index + 1) t rest
 
-type family TagTypeWithMsg t (tags :: [Tag]) (errMsg :: ErrorMessage) :: Type where
-  TagTypeWithMsg _ '[] errMsg = TypeError errMsg
-  TagTypeWithMsg t ('Tag t typ : _) _ = typ
-  TagTypeWithMsg t (_ : rest) errMsg = TagTypeWithMsg t rest errMsg
+type family FoundTag (t :: Symbol) (tags :: [Tag]) (found :: Maybe (Nat, Type)) :: (Nat, Type) where
+  FoundTag t tags 'Nothing = TypeError (NotAMemberTagMsg t tags)
+  FoundTag _ _ ('Just indexAndType) = indexAndType
 
 type family TaggedTypes (tags :: [Tag]) :: [Type] where
   TaggedTypes '[] = '[]

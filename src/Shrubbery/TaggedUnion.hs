@@ -31,14 +31,13 @@ module Shrubbery.TaggedUnion
   ) where
 
 import qualified Control.DeepSeq as DeepSeq
-import Data.Proxy (Proxy (Proxy))
 import Data.Type.Equality ((:~:) (..))
 import GHC.TypeLits (KnownNat, Symbol)
 
-import Shrubbery.BranchIndex (indexOfTypeAt, testBranchIndexEquality)
+import Shrubbery.BranchIndex (indexOfTag, testBranchIndexEquality)
 import Shrubbery.Branches (BranchBuilder, Branches, appendBranches, branchBuild, branchDefault, branchEnd, branchSetAtIndex, singleBranch)
 import Shrubbery.Classes (EqBranches, NFDataBranches, OrdBranches, ShowBranches, unifyWithIndex)
-import Shrubbery.TypeList (Append, KnownLength, Tag (..), TagIndex, TagType, TaggedTypes, TypeAtIndex, type (@=))
+import Shrubbery.TypeList (Append, KnownLength, LookupTag, Tag (..), TaggedTypes, type (@=))
 import Shrubbery.Union (Union (Union), dissectUnion)
 
 {- | 'TaggedUnion' provides a variation on the 'Union' concept that allows a type-level string symbol
@@ -131,15 +130,13 @@ newtype TaggedBranchBuilder (taggedTypes :: [Tag]) result
 -}
 unifyTaggedUnion ::
   forall (tag :: Symbol) typ taggedTypes n.
-  ( TagType tag taggedTypes ~ typ
-  , KnownNat n
-  , TagIndex tag taggedTypes ~ n
-  , TypeAtIndex n (TaggedTypes taggedTypes) ~ typ
+  ( KnownNat n
+  , LookupTag tag taggedTypes ~ '(n, typ)
   ) =>
   typ ->
   TaggedUnion taggedTypes
 unifyTaggedUnion =
-  TaggedUnion . unifyWithIndex (indexOfTypeAt (Proxy :: Proxy n))
+  TaggedUnion . unifyWithIndex (indexOfTag @tag @taggedTypes)
 {-# INLINE unifyTaggedUnion #-}
 
 {- | Selects a function from the branches based on the value contained within the union. This choice
@@ -169,15 +166,13 @@ dissectTaggedUnion (TaggedBranches branches) (TaggedUnion union) =
 -}
 matchTaggedUnion ::
   forall (tag :: Symbol) t taggedTypes n.
-  ( TagType tag taggedTypes ~ t
-  , KnownNat n
-  , TagIndex tag taggedTypes ~ n
-  , TypeAtIndex n (TaggedTypes taggedTypes) ~ t
+  ( KnownNat n
+  , LookupTag tag taggedTypes ~ '(n, t)
   ) =>
   TaggedUnion taggedTypes ->
   Maybe t
 matchTaggedUnion (TaggedUnion (Union branchIndex t)) =
-  case testBranchIndexEquality (indexOfTypeAt (Proxy :: Proxy n)) branchIndex of
+  case testBranchIndexEquality (indexOfTag @tag @taggedTypes) branchIndex of
     Just Refl -> Just t
     Nothing -> Nothing
 {-# INLINE matchTaggedUnion #-}
@@ -195,10 +190,8 @@ matchTaggedUnion (TaggedUnion (Union branchIndex t)) =
 -}
 matchTaggedUnionProxy ::
   forall (tag :: Symbol) t taggedTypes n proxy.
-  ( TagType tag taggedTypes ~ t
-  , KnownNat n
-  , TagIndex tag taggedTypes ~ n
-  , TypeAtIndex n (TaggedTypes taggedTypes) ~ t
+  ( KnownNat n
+  , LookupTag tag taggedTypes ~ '(n, t)
   ) =>
   proxy tag ->
   TaggedUnion taggedTypes ->
@@ -305,14 +298,13 @@ appendTaggedBranches (TaggedBranchBuilder branchesA) (TaggedBranchBuilder branch
 taggedBranchSet ::
   forall (tag :: Symbol) typ result taggedTypes n.
   ( KnownNat n
-  , n ~ TagIndex tag taggedTypes
-  , typ ~ TypeAtIndex n (TaggedTypes taggedTypes)
+  , LookupTag tag taggedTypes ~ '(n, typ)
   ) =>
   (typ -> result) ->
   TaggedBranchBuilder taggedTypes result ->
   TaggedBranchBuilder taggedTypes result
 taggedBranchSet branchFunction (TaggedBranchBuilder builder) =
-  TaggedBranchBuilder (branchSetAtIndex (indexOfTypeAt (Proxy :: Proxy n)) branchFunction builder)
+  TaggedBranchBuilder (branchSetAtIndex (indexOfTag @tag @taggedTypes) branchFunction builder)
 {-# INLINE taggedBranchSet #-}
 
 {- | Similar to 'branchDefault'. Initializes a branch builder that will return the specified value for

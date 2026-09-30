@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -17,6 +18,7 @@ module Shrubbery.BranchIndex
   ( BranchIndex
   , firstIndexOfType
   , indexOfTypeAt
+  , indexOfTag
   , branchIndexToInt
   , appendTypesToIndex
   , prependTypesToIndex
@@ -131,10 +133,10 @@ module Shrubbery.BranchIndex
 import Data.Kind (Type)
 import Data.Proxy (Proxy (Proxy))
 import Data.Type.Equality (TestEquality (testEquality), (:~:) (Refl))
-import GHC.TypeLits (KnownNat, natVal)
+import GHC.TypeLits (KnownNat, Symbol, natVal)
 import Unsafe.Coerce (unsafeCoerce)
 
-import Shrubbery.TypeList (Append, FirstIndexOf, KnownLength (lengthOfTypes), TypeAtIndex, ZippedTypes)
+import Shrubbery.TypeList (Append, FirstIndexOf, KnownLength (lengthOfTypes), LookupTag, Tag, TaggedTypes, TypeAtIndex, ZippedTypes)
 
 {- | A 'BranchIndex' is an zero-based index into a list of types for which the type at the index is
   known. This type is used with 'Shrubbery.Branches' to perform efficient branching at runtime.
@@ -193,6 +195,19 @@ indexOfTypeAt ::
 indexOfTypeAt =
   BranchIndex . fromInteger . natVal
 {-# INLINE indexOfTypeAt #-}
+
+{- | Finds the index of a tag in a type-level list of tags. If the tag appears more than once,
+  the first index is returned. The tag must be supplied via @TypeApplications@.
+
+@since 0.3.0.0
+-}
+indexOfTag ::
+  forall (tag :: Symbol) (tags :: [Tag]) n typ.
+  (KnownNat n, LookupTag tag tags ~ '(n, typ)) =>
+  BranchIndex typ (TaggedTypes tags)
+indexOfTag =
+  BranchIndex . fromInteger . natVal $ (Proxy :: Proxy n)
+{-# INLINE indexOfTag #-}
 
 {- | Retrieves the 'Int' representation of the branch index. It it up to the caller to use this
   integer in a responsible fashion ;)
